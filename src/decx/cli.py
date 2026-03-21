@@ -667,6 +667,7 @@ def cmd_check(args: argparse.Namespace):
     total_checked = tbl_checked + delt_checked + chart_series_checked
 
     # Summary table
+    console.print("\nResults")
     t = Table(show_header=True)
     t.add_column("Check")
     t.add_column("Checked", justify="right")
