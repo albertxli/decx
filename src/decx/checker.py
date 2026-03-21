@@ -1,4 +1,9 @@
-"""Post-pipeline data validation — compare PPT values against Excel source."""
+"""Post-pipeline data validation — compare PPT values against Excel source.
+
+Future improvements:
+- _ccst color coding check: verify font color matches expected color for each cell value
+  (positive → green, negative → pink, neutral → gray per config). Pure PPT check, no Excel needed.
+"""
 
 import logging
 import re

@@ -623,9 +623,28 @@ def cmd_run(args: argparse.Namespace):
         console.print("\n[bold]Running post-update checks...[/bold]")
         check_passed = 0
         check_failed = 0
+        verbose = getattr(args, "verbose", False)
         for job in spec.jobs:
-            console.print(f"\n[bold]{job.name}[/bold]")
-            result = _check_single_file(job.output, job.excel, config)
+            excel_name = os.path.basename(job.excel)
+            if verbose:
+                console.print(f"\n[bold]{job.name}[/bold] <- {excel_name}")
+                result, elapsed = _check_single_file(
+                    job.output, job.excel, config, verbose
+                )
+            else:
+                with Progress(
+                    SpinnerColumn(),
+                    TextColumn("[progress.description]{task.description}"),
+                    TimeElapsedColumn(),
+                    console=console,
+                    transient=True,
+                ) as progress:
+                    progress.add_task(f"Checking: {job.name}", total=None)
+                    result, elapsed = _check_single_file(
+                        job.output, job.excel, config, verbose
+                    )
+
+            console.print(f"\n[bold]{job.name}[/bold] <- {excel_name} ({elapsed:.2f}s)")
             _print_check_result(result)
             if result.passed:
                 check_passed += 1
@@ -691,13 +710,18 @@ def _print_check_result(result, label: str | None = None):
         console.print(mt)
 
 
-def _check_single_file(pptx_path: str, excel_path: str | None, config: dict):
-    """Run check on a single PPTX file. Returns a CheckResult."""
+def _check_single_file(
+    pptx_path: str, excel_path: str | None, config: dict, verbose: bool = False
+):
+    """Run check on a single PPTX file. Returns (CheckResult, elapsed_seconds)."""
     from decx.checker import run_check
 
+    t_start = time.perf_counter()
     with Session(pptx_path, excel_path=None, read_only=True) as session:
         inventory = build_presentation_inventory(session.presentation)
-        return run_check(session, config, inventory, excel_override=excel_path)
+        result = run_check(session, config, inventory, excel_override=excel_path)
+    elapsed = time.perf_counter() - t_start
+    return result, elapsed
 
 
 def cmd_check(args: argparse.Namespace):
@@ -736,8 +760,24 @@ def _cmd_check_single(target: str, config: dict, args):
             console.print(f"[red]Error:[/red] Excel file not found: {excel_path}")
             sys.exit(1)
 
-    console.print(f"\nCheck: {os.path.basename(pptx_path)}")
-    result = _check_single_file(pptx_path, excel_path, config)
+    pptx_name = os.path.basename(pptx_path)
+    verbose = getattr(args, "verbose", False)
+
+    if verbose:
+        console.print(f"\nCheck: {pptx_name}")
+        result, elapsed = _check_single_file(pptx_path, excel_path, config, verbose)
+    else:
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            TimeElapsedColumn(),
+            console=console,
+            transient=True,
+        ) as progress:
+            progress.add_task(f"Checking: {pptx_name}", total=None)
+            result, elapsed = _check_single_file(pptx_path, excel_path, config, verbose)
+
+    console.print(f"\nCheck: {pptx_name} ({elapsed:.2f}s)")
     _print_check_result(result)
 
     summary_color = "red" if result.all_mismatches else "green"
@@ -775,8 +815,26 @@ def _cmd_check_runfile(target: str, config: dict, args):
             failed += 1
             continue
 
-        console.print(f"\n[bold]{job.name}[/bold] <- {os.path.basename(job.excel)}")
-        result = _check_single_file(job.output, job.excel, config)
+        verbose = getattr(args, "verbose", False)
+        excel_name = os.path.basename(job.excel)
+
+        if verbose:
+            console.print(f"\n[bold]{job.name}[/bold] <- {excel_name}")
+            result, elapsed = _check_single_file(job.output, job.excel, config, verbose)
+        else:
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                TimeElapsedColumn(),
+                console=console,
+                transient=True,
+            ) as progress:
+                progress.add_task(f"Checking: {job.name}", total=None)
+                result, elapsed = _check_single_file(
+                    job.output, job.excel, config, verbose
+                )
+
+        console.print(f"\n[bold]{job.name}[/bold] <- {excel_name} ({elapsed:.2f}s)")
         _print_check_result(result)
 
         if result.passed:
