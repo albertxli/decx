@@ -380,8 +380,44 @@ def _build_chart_ref_map(pptx_path: str) -> dict[tuple[int, int], list[str]]:
     return result
 
 
+def _flatten_range_value(raw) -> list:
+    """Flatten the result of Range.Value2 into a flat list of values.
+
+    Range.Value2 returns:
+    - A single value (int/float/str/None) for a 1-cell range
+    - A tuple of tuples ((row1_vals,), (row2_vals,), ...) for multi-cell ranges
+    """
+    if raw is None:
+        return [None]
+    if not isinstance(raw, tuple):
+        return [raw]
+    # Tuple of tuples (2D) — flatten row by row
+    values = []
+    for item in raw:
+        if isinstance(item, tuple):
+            values.extend(item)
+        else:
+            values.append(item)
+    return values
+
+
+# Cache sheet objects to avoid repeated COM lookups
+_sheet_cache: dict[tuple, object] = {}
+
+
+def _get_sheet(wb, sheet_name: str):
+    """Get a worksheet, caching by (workbook, sheet_name)."""
+    key = (id(wb), sheet_name)
+    if key not in _sheet_cache:
+        _sheet_cache[key] = wb.Sheets(sheet_name)
+    return _sheet_cache[key]
+
+
 def _read_chart_range(wb, range_ref: str) -> list:
     """Read values from a chart range reference, handling multi-area ranges.
+
+    Uses bulk Range.Value2 (one COM call per sub-range) instead of per-cell reads.
+    GOTCHAS #16 does not apply here — chart check compares raw floats, not formatted text.
 
     Supports both simple ranges ('Tables!$B$9:$B$13') and non-contiguous
     ranges ('(Tables!$C$810,Tables!$F$810)').
@@ -392,8 +428,6 @@ def _read_chart_range(wb, range_ref: str) -> list:
         ref = ref[1:-1]
 
     # Split on comma to handle multi-area ranges
-    # But be careful: "Tables!$L$810:$O$810,Tables!$W$810:$Y$810"
-    # Each part has its own sheet!range
     sub_refs = [s.strip() for s in ref.split(",")]
 
     values = []
@@ -404,14 +438,9 @@ def _read_chart_range(wb, range_ref: str) -> list:
         else:
             sheet_name, range_addr = "Sheet1", clean
 
-        cell_range = wb.Sheets(sheet_name).Range(range_addr)
-        for r in range(1, cell_range.Rows.Count + 1):
-            for c in range(1, cell_range.Columns.Count + 1):
-                try:
-                    v = cell_range.Cells(r, c).Value2
-                    values.append(v)
-                except Exception:
-                    values.append(None)
+        sheet = _get_sheet(wb, sheet_name)
+        raw = sheet.Range(range_addr).Value2
+        values.extend(_flatten_range_value(raw))
 
     return values
 
@@ -430,6 +459,9 @@ def check_charts(session, config, inventory, excel_override=None):
 
     if not inventory.charts:
         return 0, series_checked, mismatches
+
+    # Clear sheet cache from any prior run
+    _sheet_cache.clear()
 
     # Build chart ref map keyed by (slide_num, position_on_slide)
     pptx_path = session.pptx_path
