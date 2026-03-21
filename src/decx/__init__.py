@@ -1,3 +1,3 @@
-__version__ = "0.1.3"
+__version__ = "0.1.4"
 from decx.config import DEFAULT_CONFIG as DEFAULT_CONFIG
 from decx.config import get_config as get_config
