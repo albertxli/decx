@@ -176,3 +176,53 @@ class TestFullPipeline:
             for tc in temp_copies:
                 if os.path.exists(tc):
                     os.unlink(tc)
+
+    def test_table_preserves_number_formatting(self):
+        """Verify that Excel number formatting (%, decimals) survives the pipeline.
+
+        Regression test for GOTCHAS #16: Range.Value2 strips formatting.
+        Slide 3 should contain percentage values in ntbl_ tables, not raw decimals.
+        """
+        from decx.session import Session
+        from decx.shape_finder import build_presentation_inventory
+        from decx.config import load_config
+        from decx import linker, table_updater
+
+        config = load_config()
+        pptx_copy = _make_temp_copy(TEMPLATE_PPTX)
+        excel_path = os.path.abspath(EXCEL_ARGENTINA)
+
+        try:
+            with Session(pptx_copy, excel_path) as session:
+                inventory = build_presentation_inventory(session.presentation)
+                linker.update_links(session, excel_path, config, inventory=inventory)
+                table_updater.update_tables(session, config, inventory=inventory)
+
+                # Check ntbl_ tables on slide 3 for percentage formatting
+                slide3 = session.presentation.Slides(3)
+                found_percent = False
+                for shp in slide3.Shapes:
+                    if shp.HasTable and "ntbl_" in shp.Name:
+                        tbl = shp.Table
+                        for row in range(1, tbl.Rows.Count + 1):
+                            for col in range(1, tbl.Columns.Count + 1):
+                                text = tbl.Cell(row, col).Shape.TextFrame.TextRange.Text
+                                if "%" in text:
+                                    found_percent = True
+                                # Raw decimals like "0.05" should NOT appear
+                                # (they indicate Value2 was used instead of .Text)
+                                if text.startswith("0.0") and "%" not in text:
+                                    assert False, (
+                                        f"Raw decimal found in ntbl_ table: '{text}'. "
+                                        f"This means .Value2 is being used instead of .Text"
+                                    )
+
+                # At least some cells should have % formatting
+                assert found_percent, (
+                    "No percentage values found in slide 3 ntbl_ tables. "
+                    "Expected formatted text like '5%', got raw values instead."
+                )
+
+                session.save()
+        finally:
+            os.unlink(pptx_copy)
