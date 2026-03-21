@@ -6,5 +6,6 @@ __pycache__/
 dist/
 build/
 .claude/
+CLAUDE.md
 test_files/
 RUN ALL_Table+Chart_v11.bas
