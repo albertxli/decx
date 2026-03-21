@@ -59,7 +59,7 @@ def update_links(session, excel_path: str, config: dict, inventory=None) -> int:
             shp.LinkFormat.Update()
 
             updated += 1
-            log.debug("Updated link: %s -> %s", shp.Name, excel_path)
+            log.debug("Slide %d | Updated link: %s", _slide.SlideIndex, shp.Name)
         except Exception as e:
             try:
                 shape_name = shp.Name

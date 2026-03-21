@@ -212,22 +212,32 @@ def _run_pairs(pairs: list[tuple[str, str]], config: dict, args: argparse.Namesp
 
         pptx_name = os.path.basename(pptx_path)
         excel_name = os.path.basename(excel_path)
+        verbose = getattr(args, "verbose", False)
 
         t_file = time.perf_counter()
 
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            TimeElapsedColumn(),
-            console=console,
-            transient=True,  # spinner line disappears when done
-        ) as progress:
-            progress.add_task(
-                f"Processing ({idx}/{total_files}): "
-                f"{pptx_name} <- {excel_name}",
-                total=None,
+        if verbose:
+            # Verbose: no spinner, just let logs print cleanly
+            console.print(
+                f"\n[bold]Processing ({idx}/{total_files}):[/bold] "
+                f"{pptx_name} <- {excel_name}"
             )
             results, errors = process_presentation(actual_path, excel_path, config, args)
+        else:
+            # Normal: spinner with transient (disappears when done)
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                TimeElapsedColumn(),
+                console=console,
+                transient=True,
+            ) as progress:
+                progress.add_task(
+                    f"Processing ({idx}/{total_files}): "
+                    f"{pptx_name} <- {excel_name}",
+                    total=None,
+                )
+                results, errors = process_presentation(actual_path, excel_path, config, args)
 
         elapsed = time.perf_counter() - t_file
 
