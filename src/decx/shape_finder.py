@@ -180,7 +180,9 @@ def build_presentation_inventory(presentation) -> SlideInventory:
                     for tbl_slide, tbl_shape, tbl_type, tbl_name in all_table_shapes:
                         if tbl_slide.SlideIndex != sld_idx:
                             continue
-                        if tbl_type == "trns" and is_exact_token_match(tbl_name, ole_name):
+                        if tbl_type == "trns" and is_exact_token_match(
+                            tbl_name, ole_name
+                        ):
                             inventory.tables[key] = (tbl_shape, tbl_type)
                             break
 

@@ -215,7 +215,13 @@ def update_deltas(session, config: dict, inventory=None) -> int:
         new_shape.Name = item.delt_name
 
         count += 1
-        log.debug("Slide %d | Delta '%s': %s -> %s", item.slide_index, item.delt_name, cell_value, sign)
+        log.debug(
+            "Slide %d | Delta '%s': %s -> %s",
+            item.slide_index,
+            item.delt_name,
+            cell_value,
+            sign,
+        )
 
     log.info("Updated %d delta indicator(s)", count)
     return count

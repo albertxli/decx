@@ -60,7 +60,9 @@ class Session:
             ...
     """
 
-    def __init__(self, pptx_path: str, excel_path: str | None = None, *, read_only: bool = False):
+    def __init__(
+        self, pptx_path: str, excel_path: str | None = None, *, read_only: bool = False
+    ):
         self.pptx_path = pptx_path
         self.excel_path = excel_path
         self.read_only = read_only

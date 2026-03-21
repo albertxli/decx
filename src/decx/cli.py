@@ -222,7 +222,9 @@ def _run_pairs(pairs: list[tuple[str, str]], config: dict, args: argparse.Namesp
                 f"\n[bold]Processing ({idx}/{total_files}):[/bold] "
                 f"{pptx_name} <- {excel_name}"
             )
-            results, errors = process_presentation(actual_path, excel_path, config, args)
+            results, errors = process_presentation(
+                actual_path, excel_path, config, args
+            )
         else:
             # Normal: spinner with transient (disappears when done)
             with Progress(
@@ -233,11 +235,12 @@ def _run_pairs(pairs: list[tuple[str, str]], config: dict, args: argparse.Namesp
                 transient=True,
             ) as progress:
                 progress.add_task(
-                    f"Processing ({idx}/{total_files}): "
-                    f"{pptx_name} <- {excel_name}",
+                    f"Processing ({idx}/{total_files}): {pptx_name} <- {excel_name}",
                     total=None,
                 )
-                results, errors = process_presentation(actual_path, excel_path, config, args)
+                results, errors = process_presentation(
+                    actual_path, excel_path, config, args
+                )
 
         elapsed = time.perf_counter() - t_file
 
@@ -416,6 +419,7 @@ def _count_unlinked_charts_recursive(shape, results=None):
     if results is None:
         results = [0]
     from decx.shape_finder import MSO_GROUP
+
     if shape.Type == MSO_GROUP:
         for sub_shp in shape.GroupItems:
             _count_unlinked_charts_recursive(sub_shp, results)
@@ -430,7 +434,6 @@ def _count_unlinked_charts_recursive(shape, results=None):
 
 def _count_all_unlinked_charts(presentation) -> int:
     """Count all unlinked charts across the presentation."""
-    from decx.shape_finder import MSO_GROUP
     count = 0
     for slide in presentation.Slides:
         for shp in slide.Shapes:
@@ -441,6 +444,7 @@ def _count_all_unlinked_charts(presentation) -> int:
 def _count_unlinked_in_shape(shape) -> int:
     """Count unlinked charts in a shape (recursive for groups)."""
     from decx.shape_finder import MSO_GROUP
+
     if shape.Type == MSO_GROUP:
         total = 0
         for sub_shp in shape.GroupItems:

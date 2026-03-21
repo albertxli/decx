@@ -176,17 +176,16 @@ def _process_linked_shape(
 
             # Use .Text for formatted display string (preserves %, decimals, etc.)
             # Range.Value2 is faster but loses number formatting — see GOTCHAS #16
-            cell_shape.TextFrame.TextRange.Text = (
-                cell_range.Cells(row_idx, col_idx).Text
-            )
+            cell_shape.TextFrame.TextRange.Text = cell_range.Cells(
+                row_idx, col_idx
+            ).Text
 
             # If not preserving formatting (htmp_ or brand new): pull fill & font from Excel
             if not skip_formatting and (old_fmt is None or not local_preserve):
                 try:
-                    cell_color = (
-                        cell_range.Cells(row_idx, col_idx)
-                        .DisplayFormat.Interior.Color
-                    )
+                    cell_color = cell_range.Cells(
+                        row_idx, col_idx
+                    ).DisplayFormat.Interior.Color
                     cell_shape.Fill.ForeColor.RGB = cell_color
                 except Exception:
                     pass
