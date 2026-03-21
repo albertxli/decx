@@ -1,5 +1,7 @@
 """Shape discovery: word-boundary matching, find special shapes by prefix."""
 
+from dataclasses import dataclass, field
+
 # COM constants
 MSO_LINKED_OLE_OBJECT = 10  # msoLinkedOLEObject
 MSO_GROUP = 6               # msoGroup
@@ -44,11 +46,131 @@ def _is_word_boundary(char: str) -> bool:
     return not char.isalnum()
 
 
+@dataclass
+class SlideInventory:
+    """Pre-scanned index of all interesting shapes in a presentation.
+
+    Built once by build_presentation_inventory(), used by all pipeline steps
+    for O(1) lookups instead of repeated slide enumeration.
+    """
+    # All linked OLE Excel.Sheet shapes: list of (slide, shape)
+    ole_shapes: list = field(default_factory=list)
+    # ole_name -> (shape, table_type) for ntbl_/htmp_/trns_ shapes
+    tables: dict = field(default_factory=dict)
+    # ole_name -> shape for delt_ shapes
+    delts: dict = field(default_factory=dict)
+    # Shapes with _ccst in name and HasTable
+    ccst_tables: list = field(default_factory=list)
+    # Linked chart shapes (HasChart + IsLinked)
+    charts: list = field(default_factory=list)
+
+
+def _scan_shape_recursive(shape, slide, inventory: SlideInventory,
+                          all_table_shapes: list, all_delt_shapes: list):
+    """Recursively scan a shape (and groups) to populate inventory lists."""
+    if shape.Type == MSO_GROUP:
+        for sub_shp in shape.GroupItems:
+            _scan_shape_recursive(sub_shp, slide, inventory,
+                                  all_table_shapes, all_delt_shapes)
+        return
+
+    # Linked OLE Excel.Sheet
+    if shape.Type == MSO_LINKED_OLE_OBJECT:
+        if shape.LinkFormat is not None:
+            try:
+                prog_id = shape.OLEFormat.ProgID
+                if "Excel.Sheet" in prog_id:
+                    inventory.ole_shapes.append((slide, shape))
+            except Exception:
+                pass
+
+    # Linked charts
+    if shape.HasChart:
+        try:
+            if shape.Chart.ChartData.IsLinked:
+                inventory.charts.append(shape)
+        except Exception:
+            pass
+
+    # Table shapes: collect for later OLE-name matching
+    name = shape.Name
+    if shape.HasTable:
+        # _ccst tables
+        if "_ccst" in name:
+            inventory.ccst_tables.append(shape)
+
+        # ntbl_/htmp_/trns_ candidates
+        for prefix in ("ntbl_", "htmp_", "trns_"):
+            if prefix in name:
+                all_table_shapes.append((shape, prefix.rstrip("_"), name))
+                break  # a shape matches at most one prefix
+
+    # delt_ candidates
+    if "delt_" in name:
+        all_delt_shapes.append((shape, name))
+
+
+def build_presentation_inventory(presentation) -> SlideInventory:
+    """Scan all slides/shapes ONCE and build a complete inventory.
+
+    This replaces multiple per-step slide enumerations with a single pass.
+    Table and delt shapes are indexed by OLE name for O(1) lookup.
+    """
+    inventory = SlideInventory()
+    all_table_shapes: list = []  # (shape, table_type, shape_name)
+    all_delt_shapes: list = []   # (shape, shape_name)
+
+    for slide in presentation.Slides:
+        for shp in slide.Shapes:
+            _scan_shape_recursive(shp, slide, inventory,
+                                  all_table_shapes, all_delt_shapes)
+
+    # Now index tables and delts by OLE name.
+    # For each OLE shape, find matching table/delt shapes.
+    for _slide, ole_shp in inventory.ole_shapes:
+        ole_name = ole_shp.Name
+
+        # Tables: search priority ntbl -> htmp -> trns
+        if ole_name not in inventory.tables:
+            for tbl_shape, tbl_type, tbl_name in all_table_shapes:
+                if tbl_type == "ntbl" and "ntbl_" in tbl_name:
+                    if is_exact_token_match(tbl_name, ole_name):
+                        inventory.tables[ole_name] = (tbl_shape, tbl_type)
+                        break
+            else:
+                # Try htmp
+                for tbl_shape, tbl_type, tbl_name in all_table_shapes:
+                    if tbl_type == "htmp" and "htmp_" in tbl_name:
+                        if is_exact_token_match(tbl_name, ole_name):
+                            inventory.tables[ole_name] = (tbl_shape, tbl_type)
+                            break
+                else:
+                    # Try trns
+                    for tbl_shape, tbl_type, tbl_name in all_table_shapes:
+                        if tbl_type == "trns" and "trns_" in tbl_name:
+                            if is_exact_token_match(tbl_name, ole_name):
+                                inventory.tables[ole_name] = (tbl_shape, tbl_type)
+                                break
+
+        # Delts
+        if ole_name not in inventory.delts:
+            for delt_shape, delt_name in all_delt_shapes:
+                if is_exact_token_match(delt_name, ole_name):
+                    inventory.delts[ole_name] = delt_shape
+                    break
+
+    return inventory
+
+
+# === Backward-compatible functions (deprecated, use inventory instead) ===
+
 def find_table_shape(slide, ole_name: str):
     """Find an existing ntbl_/htmp_/trns_ table shape associated with an OLE object.
 
     Search priority: ntbl -> htmp -> trns (matches VBA).
     Returns (shape, table_type) or (None, None).
+
+    Deprecated: use build_presentation_inventory() and inventory.tables instead.
     """
     # Collect candidates in priority order
     for prefix in ("ntbl_", "htmp_", "trns_"):
@@ -61,7 +183,10 @@ def find_table_shape(slide, ole_name: str):
 
 
 def find_delt_shape(slide, ole_name: str):
-    """Find a delt_ shape associated with an OLE object. Returns shape or None."""
+    """Find a delt_ shape associated with an OLE object. Returns shape or None.
+
+    Deprecated: use build_presentation_inventory() and inventory.delts instead.
+    """
     for shp in slide.Shapes:
         name = shp.Name
         if "delt_" in name and is_exact_token_match(name, ole_name):
@@ -82,7 +207,10 @@ def find_template_shape(presentation, template_name: str, slide_index: int = 1):
 
 
 def _collect_ole_recursive(shape, results, slide):
-    """Recursively collect linked OLE Excel.Sheet shapes, including inside groups."""
+    """Recursively collect linked OLE Excel.Sheet shapes, including inside groups.
+
+    Deprecated: use build_presentation_inventory() instead.
+    """
     if shape.Type == MSO_GROUP:
         for sub_shp in shape.GroupItems:
             _collect_ole_recursive(sub_shp, results, slide)
@@ -100,6 +228,8 @@ def collect_linked_ole_shapes(presentation) -> list:
     """Collect all linked OLE Excel.Sheet shapes across all slides.
 
     Returns list of (slide, shape) tuples. Recurses into groups.
+
+    Deprecated: use build_presentation_inventory() instead.
     """
     results = []
     for slide in presentation.Slides:
@@ -109,7 +239,10 @@ def collect_linked_ole_shapes(presentation) -> list:
 
 
 def _collect_charts_recursive(shape, results):
-    """Recursively collect linked chart shapes, including inside groups."""
+    """Recursively collect linked chart shapes, including inside groups.
+
+    Deprecated: use build_presentation_inventory() instead.
+    """
     if shape.Type == MSO_GROUP:
         for sub_shp in shape.GroupItems:
             _collect_charts_recursive(sub_shp, results)
@@ -125,6 +258,8 @@ def collect_linked_charts(presentation) -> list:
     """Collect all linked chart shapes across all slides.
 
     Returns list of shapes. Recurses into groups.
+
+    Deprecated: use build_presentation_inventory() instead.
     """
     results = []
     for slide in presentation.Slides:

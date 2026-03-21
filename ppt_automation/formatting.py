@@ -131,6 +131,50 @@ def extract_formatting(table_shape) -> TableFormatting:
     return fmt
 
 
+def extract_formatting_minimal(table_shape) -> TableFormatting:
+    """Extract only geometry + fill formatting (skip borders/margins/alignment/font).
+
+    Used for htmp_ tables where we only need fill colors from the existing table
+    to avoid re-extracting them from Excel. Borders, margins, alignment, and font
+    don't change so we skip them entirely (~75% fewer COM calls than full extract).
+    """
+    tbl = table_shape.Table
+    num_rows = tbl.Rows.Count
+    num_cols = tbl.Columns.Count
+
+    fmt = TableFormatting(
+        shape_left=table_shape.Left,
+        shape_top=table_shape.Top,
+        shape_width=table_shape.Width,
+        shape_height=table_shape.Height,
+    )
+
+    for i in range(1, num_rows + 1):
+        fmt.row_heights.append(tbl.Rows(i).Height)
+
+    for j in range(1, num_cols + 1):
+        fmt.column_widths.append(tbl.Columns(j).Width)
+
+    for i in range(1, num_rows + 1):
+        row_cells = []
+        for j in range(1, num_cols + 1):
+            cell = tbl.Cell(i, j)
+            cell_shape = cell.Shape
+            fill = cell_shape.Fill
+
+            cf = CellFormatting(
+                fill_visible=(fill.Visible != MSO_FALSE),
+                fill_type=fill.Type,
+                fill_color=fill.ForeColor.RGB,
+                fill_transparency=fill.Transparency,
+            )
+            # Leave borders/font/margins at defaults - they won't be applied
+            row_cells.append(cf)
+        fmt.cells.append(row_cells)
+
+    return fmt
+
+
 def apply_formatting(table_shape, fmt: TableFormatting, preserve_fill: bool = True):
     """Apply saved formatting data back to a PowerPoint table shape.
 

@@ -10,13 +10,20 @@ log = logging.getLogger(__name__)
 PP_UPDATE_OPTION_MANUAL = 1
 
 
-def update_charts(session, excel_path: str) -> int:
+def update_charts(session, excel_path: str, inventory=None) -> int:
     """Re-link all embedded charts to the specified Excel file.
 
     Sets chart links to manual update mode after updating.
+
+    When inventory is provided, uses pre-collected charts list
+    instead of scanning all slides.
+
     Returns the count of updated charts.
     """
-    charts = collect_linked_charts(session.presentation)
+    if inventory is not None:
+        charts = inventory.charts
+    else:
+        charts = collect_linked_charts(session.presentation)
 
     if not charts:
         log.info("No linked charts found")

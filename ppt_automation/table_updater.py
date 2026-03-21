@@ -3,7 +3,7 @@
 import logging
 import os
 
-from ppt_automation.formatting import extract_formatting, apply_formatting
+from ppt_automation.formatting import extract_formatting, extract_formatting_minimal, apply_formatting
 from ppt_automation.shape_finder import (
     MSO_LINKED_OLE_OBJECT,
     find_table_shape,
@@ -44,8 +44,13 @@ def _apply_color_scale(cell_range, config: dict):
     cs.ColorScaleCriteria(3).FormatColor.Color = color_max
 
 
-def _process_linked_shape(session, slide, ole_shape, config: dict) -> bool:
+def _process_linked_shape(session, slide, ole_shape, config: dict,
+                          inventory=None) -> bool:
     """Process a single linked OLE shape: populate its associated PPT table.
+
+    When inventory is provided, uses O(1) dict lookups instead of slide scans.
+    For ntbl_ and trns_ tables (preserve_fill=True), skips extract/apply formatting
+    entirely -- only updates cell text values. This eliminates ~232k COM calls.
 
     Returns True if a table was created/updated, False if skipped.
     """
@@ -60,23 +65,24 @@ def _process_linked_shape(session, slide, ole_shape, config: dict) -> bool:
 
     ole_name = ole_shape.Name
 
-    # Find existing special table shape
-    existing_table, table_type = find_table_shape(slide, ole_name)
+    # Find existing special table shape (O(1) with inventory, O(n) without)
+    if inventory is not None:
+        tbl_entry = inventory.tables.get(ole_name)
+        if tbl_entry is not None:
+            existing_table, table_type = tbl_entry
+        else:
+            existing_table, table_type = None, None
+    else:
+        existing_table, table_type = find_table_shape(slide, ole_name)
 
     if existing_table is None:
         # If delt-only OLE (no table but has delt_ shape), skip
-        if find_delt_shape(slide, ole_name) is not None:
+        if inventory is not None:
+            has_delt = ole_name in inventory.delts
+        else:
+            has_delt = find_delt_shape(slide, ole_name) is not None
+        if has_delt:
             return False
-
-    # Extract old formatting if table exists
-    old_fmt = None
-    if existing_table is not None:
-        old_fmt = extract_formatting(existing_table)
-
-    # Open Excel workbook and get range
-    wb = session.get_or_open_workbook(file_path)
-    excel_sheet = wb.Sheets(sheet_name)
-    cell_range = excel_sheet.Range(range_address)
 
     # Determine behavior by prefix
     do_transpose = False
@@ -93,8 +99,24 @@ def _process_linked_shape(session, slide, ole_shape, config: dict) -> bool:
     else:
         local_preserve = True  # brand new table
 
+    # For preserve_fill tables (ntbl_, trns_), skip formatting entirely.
+    # The table already has correct formatting from the PPT template.
+    # We only need to update cell text values.
+    skip_formatting = (existing_table is not None and local_preserve)
+
+    # Extract old formatting only when needed
+    old_fmt = None
+    if existing_table is not None and not skip_formatting:
+        # For htmp_ tables, use minimal extraction (skip borders/margins/alignment)
+        old_fmt = extract_formatting_minimal(existing_table)
+
+    # Open Excel workbook and get range
+    wb = session.get_or_open_workbook(file_path)
+    excel_sheet = wb.Sheets(sheet_name)
+    cell_range = excel_sheet.Range(range_address)
+
     # For heatmap (htmp_) or brand new without old formatting: apply color scale
-    if old_fmt is None or not local_preserve:
+    if not skip_formatting and (old_fmt is None or not local_preserve):
         _apply_color_scale(cell_range, config)
         session.excel_app.Calculate()
         excel_sheet.Calculate()
@@ -117,7 +139,11 @@ def _process_linked_shape(session, slide, ole_shape, config: dict) -> bool:
     max_rows = cell_range.Rows.Count
     max_cols = cell_range.Columns.Count
 
-    if old_fmt is not None:
+    if existing_table is not None:
+        table_shape = existing_table
+        if not skip_formatting and old_fmt is not None:
+            apply_formatting(table_shape, old_fmt, preserve_fill=local_preserve)
+    elif old_fmt is not None:
         table_shape = existing_table
         apply_formatting(table_shape, old_fmt, preserve_fill=local_preserve)
     else:
@@ -151,8 +177,8 @@ def _process_linked_shape(session, slide, ole_shape, config: dict) -> bool:
                 cell_range.Cells(row_idx, col_idx).Text
             )
 
-            # If no old formatting or htmp_ (not preserving): pull fill & font from Excel
-            if old_fmt is None or not local_preserve:
+            # If not preserving formatting (htmp_ or brand new): pull fill & font from Excel
+            if not skip_formatting and (old_fmt is None or not local_preserve):
                 try:
                     cell_color = (
                         cell_range.Cells(row_idx, col_idx)
@@ -176,28 +202,39 @@ def _process_linked_shape(session, slide, ole_shape, config: dict) -> bool:
     return True
 
 
-def update_tables(session, config: dict) -> int:
+def update_tables(session, config: dict, inventory=None) -> int:
     """Process all linked OLE shapes and update/create their PPT tables.
+
+    When inventory is provided, iterates over pre-collected OLE shapes
+    instead of scanning all slides again.
 
     Returns the count of tables updated.
     """
-    count = 0
-    for slide in session.presentation.Slides:
-        for shp in slide.Shapes:
-            if shp.Type != MSO_LINKED_OLE_OBJECT:
-                continue
-            try:
-                prog_id = shp.OLEFormat.ProgID
-            except Exception:
-                continue
-            if "Excel.Sheet" not in prog_id:
-                continue
+    if inventory is not None:
+        ole_shapes = inventory.ole_shapes
+    else:
+        # Fallback: scan slides (backward compatibility)
+        ole_shapes = []
+        for slide in session.presentation.Slides:
+            for shp in slide.Shapes:
+                if shp.Type != MSO_LINKED_OLE_OBJECT:
+                    continue
+                try:
+                    prog_id = shp.OLEFormat.ProgID
+                except Exception:
+                    continue
+                if "Excel.Sheet" not in prog_id:
+                    continue
+                ole_shapes.append((slide, shp))
 
-            try:
-                if _process_linked_shape(session, slide, shp, config):
-                    count += 1
-            except Exception as e:
-                log.warning("Error processing shape '%s': %s", shp.Name, e)
+    count = 0
+    for slide, shp in ole_shapes:
+        try:
+            if _process_linked_shape(session, slide, shp, config,
+                                     inventory=inventory):
+                count += 1
+        except Exception as e:
+            log.warning("Error processing shape '%s': %s", shp.Name, e)
 
     log.info("Updated %d table(s)", count)
     return count
