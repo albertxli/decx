@@ -29,7 +29,8 @@ HAS_TEST_FILES = all(
 
 # Check if COM is available
 try:
-    import win32com.client
+    import win32com.client  # noqa: F401
+
     HAS_COM = True
 except ImportError:
     HAS_COM = False
@@ -57,7 +58,13 @@ class TestFullPipeline:
         import yaml
         from decx.session import Session
         from decx.shape_finder import build_presentation_inventory
-        from decx import linker, table_updater, delta_updater, color_coder, chart_updater
+        from decx import (
+            linker,
+            table_updater,
+            delta_updater,
+            color_coder,
+            chart_updater,
+        )
 
         config_path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -73,11 +80,21 @@ class TestFullPipeline:
         try:
             with Session(pptx_copy, excel_path) as session:
                 inventory = build_presentation_inventory(session.presentation)
-                links = linker.update_links(session, excel_path, config, inventory=inventory)
-                tables = table_updater.update_tables(session, config, inventory=inventory)
-                deltas = delta_updater.update_deltas(session, config, inventory=inventory)
-                colors = color_coder.apply_color_coding(session, config, inventory=inventory)
-                charts = chart_updater.update_charts(session, excel_path, inventory=inventory)
+                links = linker.update_links(
+                    session, excel_path, config, inventory=inventory
+                )
+                tables = table_updater.update_tables(
+                    session, config, inventory=inventory
+                )
+                deltas = delta_updater.update_deltas(
+                    session, config, inventory=inventory
+                )
+                colors = color_coder.apply_color_coding(
+                    session, config, inventory=inventory
+                )
+                charts = chart_updater.update_charts(
+                    session, excel_path, inventory=inventory
+                )
                 session.save()
 
             # Basic sanity: no exceptions raised, counts are non-negative
@@ -93,7 +110,7 @@ class TestFullPipeline:
         """Verify OLE links point to new Excel file after Step 1a."""
         import yaml
         from decx.session import Session
-        from decx.shape_finder import build_presentation_inventory, collect_linked_ole_shapes
+        from decx.shape_finder import build_presentation_inventory
         from decx import linker
 
         config_path = os.path.join(
@@ -109,7 +126,9 @@ class TestFullPipeline:
         try:
             with Session(pptx_copy, excel_path) as session:
                 inventory = build_presentation_inventory(session.presentation)
-                updated = linker.update_links(session, excel_path, config, inventory=inventory)
+                updated = linker.update_links(
+                    session, excel_path, config, inventory=inventory
+                )
 
                 if updated > 0:
                     ole_shapes = inventory.ole_shapes

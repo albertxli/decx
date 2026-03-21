@@ -121,7 +121,9 @@ def _run_pairs(pairs: list[tuple[str, str]], config: dict, args: argparse.Namesp
             print(f"Excel not found, skipping: {excel_path}")
             continue
 
-        print(f"Processing: {os.path.basename(pptx_path)} <- {os.path.basename(excel_path)}")
+        print(
+            f"Processing: {os.path.basename(pptx_path)} <- {os.path.basename(excel_path)}"
+        )
         t_file = time.perf_counter()
 
         results = process_presentation(pptx_path, excel_path, config, args)
@@ -178,6 +180,7 @@ def cmd_update(args: argparse.Namespace):
     excel_path = args.excel
     if not excel_path:
         from decx.file_picker import pick_excel_file
+
         excel_path = pick_excel_file()
         if not excel_path:
             print("No Excel file selected. Exiting.")
@@ -242,27 +245,40 @@ def main():
         help="One or more .pptx file paths (supports glob patterns). Used with --excel.",
     )
     update_parser.add_argument(
-        "--excel", "-e",
+        "--excel",
+        "-e",
         default=None,
         help="Path to the Excel data file. If omitted, a file dialog will open.",
     )
     update_parser.add_argument(
-        "--pair", "-p",
+        "--pair",
+        "-p",
         action="append",
         default=None,
         metavar="PPT:XLSX",
         help="A pptx:xlsx pair. Can be repeated for batch processing multiple pairs.",
     )
     update_parser.add_argument(
-        "--config", "-c",
+        "--config",
+        "-c",
         default=None,
         help="Path to config.yaml (default: built-in defaults)",
     )
-    update_parser.add_argument("--skip-links", action="store_true", help="Skip Step 1a (re-link OLE)")
-    update_parser.add_argument("--skip-deltas", action="store_true", help="Skip Step 1c (delta arrows)")
-    update_parser.add_argument("--skip-coloring", action="store_true", help="Skip Step 1d (_ccst coloring)")
-    update_parser.add_argument("--skip-charts", action="store_true", help="Skip Step 2 (chart links)")
-    update_parser.add_argument("--verbose", "-v", action="store_true", help="Enable debug logging")
+    update_parser.add_argument(
+        "--skip-links", action="store_true", help="Skip Step 1a (re-link OLE)"
+    )
+    update_parser.add_argument(
+        "--skip-deltas", action="store_true", help="Skip Step 1c (delta arrows)"
+    )
+    update_parser.add_argument(
+        "--skip-coloring", action="store_true", help="Skip Step 1d (_ccst coloring)"
+    )
+    update_parser.add_argument(
+        "--skip-charts", action="store_true", help="Skip Step 2 (chart links)"
+    )
+    update_parser.add_argument(
+        "--verbose", "-v", action="store_true", help="Enable debug logging"
+    )
 
     # --- info subcommand ---
     subparsers.add_parser("info", help="Show project information (coming soon)")

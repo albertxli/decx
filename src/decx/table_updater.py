@@ -3,7 +3,7 @@
 import logging
 import os
 
-from decx.formatting import extract_formatting, extract_formatting_minimal, apply_formatting
+from decx.formatting import extract_formatting_minimal, apply_formatting
 from decx.shape_finder import (
     MSO_LINKED_OLE_OBJECT,
     find_table_shape,
@@ -44,8 +44,9 @@ def _apply_color_scale(cell_range, config: dict):
     cs.ColorScaleCriteria(3).FormatColor.Color = color_max
 
 
-def _process_linked_shape(session, slide, ole_shape, config: dict,
-                          inventory=None) -> bool:
+def _process_linked_shape(
+    session, slide, ole_shape, config: dict, inventory=None
+) -> bool:
     """Process a single linked OLE shape: populate its associated PPT table.
 
     When inventory is provided, uses O(1) dict lookups instead of slide scans.
@@ -102,7 +103,7 @@ def _process_linked_shape(session, slide, ole_shape, config: dict,
     # For preserve_fill tables (ntbl_, trns_), skip formatting entirely.
     # The table already has correct formatting from the PPT template.
     # We only need to update cell text values.
-    skip_formatting = (existing_table is not None and local_preserve)
+    skip_formatting = existing_table is not None and local_preserve
 
     # Extract old formatting only when needed
     old_fmt = None
@@ -197,10 +198,9 @@ def _process_linked_shape(session, slide, ole_shape, config: dict,
             # These still need per-cell COM reads for DisplayFormat colors
             if not skip_formatting and (old_fmt is None or not local_preserve):
                 try:
-                    cell_color = (
-                        cell_range.Cells(row_idx + 1, col_idx + 1)
-                        .DisplayFormat.Interior.Color
-                    )
+                    cell_color = cell_range.Cells(
+                        row_idx + 1, col_idx + 1
+                    ).DisplayFormat.Interior.Color
                     cell_shape.Fill.ForeColor.RGB = cell_color
                 except Exception:
                     pass
@@ -263,8 +263,7 @@ def update_tables(session, config: dict, inventory=None) -> int:
     count = 0
     for slide, shp in ole_shapes:
         try:
-            if _process_linked_shape(session, slide, shp, config,
-                                     inventory=inventory):
+            if _process_linked_shape(session, slide, shp, config, inventory=inventory):
                 count += 1
         except Exception as e:
             log.warning("Error processing shape '%s': %s", shp.Name, e)

@@ -20,7 +20,7 @@ def _convert_single_r1c1(cell: str) -> str:
     cell = cell.strip()
     c_pos = cell.upper().index("C", 1)  # skip first char which is 'R'
     row_num = int(cell[1:c_pos])
-    col_num = int(cell[c_pos + 1:])
+    col_num = int(cell[c_pos + 1 :])
 
     col_letter = ""
     n = col_num

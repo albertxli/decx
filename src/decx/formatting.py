@@ -23,6 +23,7 @@ MSO_LINE_SOLID = 1
 @dataclass
 class CellFormatting:
     """Formatting data for a single table cell."""
+
     # Font
     font_name: str = ""
     font_size: float = 0
@@ -44,15 +45,17 @@ class CellFormatting:
     fill_color: int = 0
     fill_transparency: float = 0
     # Borders: list of 4 tuples (visible, weight, dash_style, color)
-    borders: list = field(default_factory=lambda: [
-        (MSO_FALSE, 0, MSO_LINE_SOLID, 0xFFFFFF)
-        for _ in range(4)
-    ])
+    borders: list = field(
+        default_factory=lambda: [
+            (MSO_FALSE, 0, MSO_LINE_SOLID, 0xFFFFFF) for _ in range(4)
+        ]
+    )
 
 
 @dataclass
 class TableFormatting:
     """Complete formatting snapshot for a PowerPoint table shape."""
+
     shape_left: float = 0
     shape_top: float = 0
     shape_width: float = 0
@@ -115,12 +118,14 @@ def extract_formatting(table_shape) -> TableFormatting:
             for bt in BORDER_TYPES:
                 try:
                     border = cell.Borders(bt)
-                    borders.append((
-                        border.Visible,
-                        border.Weight,
-                        border.DashStyle,
-                        border.ForeColor.RGB,
-                    ))
+                    borders.append(
+                        (
+                            border.Visible,
+                            border.Weight,
+                            border.DashStyle,
+                            border.ForeColor.RGB,
+                        )
+                    )
                 except Exception:
                     borders.append((MSO_FALSE, 0, MSO_LINE_SOLID, 0xFFFFFF))
             cf.borders = borders
