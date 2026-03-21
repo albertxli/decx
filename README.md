@@ -210,6 +210,20 @@ links:
 4. **Color coding** — apply color rules to `_ccst` tables
 5. **Update charts** — refresh linked chart data sources
 
+## Benchmark
+
+Reference benchmarks on a 30-slide presentation with 86 OLE objects and 100 charts. Actual speed varies by machine, file size, and disk speed.
+
+| Scenario | Time |
+|---|---|
+| Same Excel file (re-run) | ~17s |
+| Different Excel file (same folder) | ~36s |
+| Different Excel file (remote/network folder) | ~36s |
+
+Batch processing 3 country reports: ~60s total.
+
+> **Note:** OLE visual thumbnails are not refreshed during update (they show cached images). This is intentional — refreshing each OLE visual adds ~4s per object for remote files and provides no value since OLE objects are hidden behind native PowerPoint tables. Tables, charts, and delta indicators all receive fresh data directly.
+
 ## License
 
 MIT
