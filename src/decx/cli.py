@@ -115,49 +115,67 @@ def _make_summary_table(results: dict, column_label: str = "Count") -> Table:
     return table
 
 
+class _ErrorCollector(logging.Handler):
+    """Logging handler that buffers WARNING+ messages for later display."""
+
+    def __init__(self):
+        super().__init__(level=logging.WARNING)
+        self.errors: list[str] = []
+
+    def emit(self, record):
+        self.errors.append(self.format(record))
+
+
 def process_presentation(
     pptx_path: str,
     excel_path: str,
     config: dict,
     options: argparse.Namespace,
-) -> dict:
+) -> tuple[dict, list[str]]:
     """Process a single presentation through the full pipeline.
 
-    Returns a dict with counts: links, tables, deltas, colors, charts.
+    Returns (results_dict, error_messages).
     """
     results = {"links": 0, "tables": 0, "deltas": 0, "colors": 0, "charts": 0}
 
-    with Session(pptx_path, excel_path) as session:
-        # Build shape inventory ONCE — all steps use O(1) lookups from this
-        inventory = build_presentation_inventory(session.presentation)
+    # Collect warnings/errors during processing
+    collector = _ErrorCollector()
+    collector.setFormatter(logging.Formatter("%(name)s: %(message)s"))
+    logging.getLogger("decx").addHandler(collector)
 
-        if not options.skip_links:
-            results["links"] = linker.update_links(
-                session, excel_path, config, inventory=inventory
-            )
+    try:
+        with Session(pptx_path, excel_path) as session:
+            inventory = build_presentation_inventory(session.presentation)
 
-        results["tables"] = table_updater.update_tables(
-            session, config, inventory=inventory
-        )
+            if not options.skip_links:
+                results["links"] = linker.update_links(
+                    session, excel_path, config, inventory=inventory
+                )
 
-        if not options.skip_deltas:
-            results["deltas"] = delta_updater.update_deltas(
+            results["tables"] = table_updater.update_tables(
                 session, config, inventory=inventory
             )
 
-        if not options.skip_coloring:
-            results["colors"] = color_coder.apply_color_coding(
-                session, config, inventory=inventory
-            )
+            if not options.skip_deltas:
+                results["deltas"] = delta_updater.update_deltas(
+                    session, config, inventory=inventory
+                )
 
-        if not options.skip_charts:
-            results["charts"] = chart_updater.update_charts(
-                session, excel_path, inventory=inventory
-            )
+            if not options.skip_coloring:
+                results["colors"] = color_coder.apply_color_coding(
+                    session, config, inventory=inventory
+                )
 
-        session.save()
+            if not options.skip_charts:
+                results["charts"] = chart_updater.update_charts(
+                    session, excel_path, inventory=inventory
+                )
 
-    return results
+            session.save()
+    finally:
+        logging.getLogger("decx").removeHandler(collector)
+
+    return results, collector.errors
 
 
 def _run_pairs(pairs: list[tuple[str, str]], config: dict, args: argparse.Namespace):
@@ -197,12 +215,14 @@ def _run_pairs(pairs: list[tuple[str, str]], config: dict, args: argparse.Namesp
                 f"{pptx_name} <- {excel_name}",
                 total=None,
             )
-            results = process_presentation(actual_path, excel_path, config, args)
+            results, errors = process_presentation(actual_path, excel_path, config, args)
 
         elapsed = time.perf_counter() - t_file
 
         # Per-file summary
         console.print(f"\n{pptx_name} <- {excel_name} ({elapsed:.2f}s)")
+        for err in errors:
+            console.print(f"  [bold red]WARNING:[/bold red] {err}")
         console.print(_make_summary_table(results))
 
         for key in grand_total:
@@ -217,8 +237,9 @@ def _run_pairs(pairs: list[tuple[str, str]], config: dict, args: argparse.Namesp
 
 def cmd_update(args: argparse.Namespace):
     """Handle the 'update' subcommand — main pipeline."""
-    # Logging
-    level = logging.DEBUG if args.verbose else logging.INFO
+    # Logging — suppress INFO by default so spinner stays clean.
+    # Use -v for full logging output.
+    level = logging.DEBUG if args.verbose else logging.WARNING
     logging.basicConfig(
         level=level,
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
