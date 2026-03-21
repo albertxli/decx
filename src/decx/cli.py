@@ -619,6 +619,85 @@ def cmd_run(args: argparse.Namespace):
     _run_pairs(pairs, config, opts)
 
 
+def cmd_check(args: argparse.Namespace):
+    """Handle the 'check' subcommand — validate PPT values against Excel."""
+    from decx.checker import check_tables, check_deltas
+
+    # Logging
+    if args.verbose:
+        logging.basicConfig(
+            level=logging.DEBUG,
+            format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+            datefmt="%H:%M:%S",
+        )
+    else:
+        logging.basicConfig(level=logging.CRITICAL)
+
+    pptx_path = os.path.abspath(args.presentation)
+    if not os.path.exists(pptx_path):
+        console.print(f"[red]Error:[/red] File not found: {pptx_path}")
+        sys.exit(1)
+
+    excel_path = None
+    if args.excel:
+        excel_path = os.path.abspath(args.excel)
+        if not os.path.exists(excel_path):
+            console.print(f"[red]Error:[/red] Excel file not found: {excel_path}")
+            sys.exit(1)
+
+    config = get_config()
+
+    console.print(f"\nCheck: {os.path.basename(pptx_path)}")
+
+    with Session(pptx_path, excel_path=None, read_only=True) as session:
+        inventory = build_presentation_inventory(session.presentation)
+
+        tbl_checked, tbl_mismatches = check_tables(
+            session, config, inventory, excel_override=excel_path
+        )
+        delt_checked, delt_mismatches = check_deltas(
+            session, config, inventory, excel_override=excel_path
+        )
+
+    # Print results
+    all_mismatches = tbl_mismatches + delt_mismatches
+    total_checked = tbl_checked + delt_checked
+
+    # Summary table
+    t = Table(show_header=True)
+    t.add_column("Check")
+    t.add_column("Checked", justify="right")
+    t.add_column("Mismatches", justify="right")
+    t.add_column("Status", justify="center")
+
+    tbl_status = "[red]FAIL[/red]" if tbl_mismatches else "[green]PASS[/green]"
+    delt_status = "[red]FAIL[/red]" if delt_mismatches else "[green]PASS[/green]"
+    t.add_row("Tables", str(tbl_checked), str(len(tbl_mismatches)), tbl_status)
+    t.add_row("Deltas", str(delt_checked), str(len(delt_mismatches)), delt_status)
+    console.print(t)
+
+    # Mismatch details table
+    if all_mismatches:
+        console.print("\nMismatches")
+        mt = Table(show_header=True)
+        mt.add_column("Slide", justify="right")
+        mt.add_column("Shape")
+        mt.add_column("Detail")
+        for m in all_mismatches:
+            mt.add_row(str(m.slide), m.shape_name, m.detail)
+        console.print(mt)
+
+    # Summary line
+    summary_color = "red" if all_mismatches else "green"
+    console.print(
+        f"\n[bold {summary_color}]Summary: {total_checked} checked, "
+        f"{len(all_mismatches)} mismatch(es)[/bold {summary_color}]"
+    )
+
+    if all_mismatches:
+        sys.exit(1)
+
+
 def cmd_config():
     """Handle the 'config' subcommand — show all available --set keys."""
     t = Table(show_header=True)
@@ -756,6 +835,32 @@ def main():
         "--verbose", "-v", action="store_true", help="Enable debug logging"
     )
 
+    # --- check subcommand ---
+    check_parser = subparsers.add_parser(
+        "check",
+        help="Validate PPT values against Excel source data",
+        epilog=(
+            "Examples:\n"
+            "  decx check report.pptx\n"
+            "  decx check report.pptx --excel data.xlsx\n"
+            "  decx check report.pptx -v\n"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    check_parser.add_argument(
+        "presentation",
+        help="Path to the .pptx file to validate",
+    )
+    check_parser.add_argument(
+        "--excel",
+        "-e",
+        default=None,
+        help="Excel file to check against (default: uses current OLE links)",
+    )
+    check_parser.add_argument(
+        "--verbose", "-v", action="store_true", help="Enable debug logging"
+    )
+
     args = parser.parse_args()
 
     if args.command == "update":
@@ -768,6 +873,8 @@ def main():
         cmd_steps()
     elif args.command == "run":
         cmd_run(args)
+    elif args.command == "check":
+        cmd_check(args)
     else:
         parser.print_help()
         sys.exit(0)

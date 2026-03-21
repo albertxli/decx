@@ -14,6 +14,16 @@ from decx.utils import extract_link_parts
 
 log = logging.getLogger(__name__)
 
+SIGN_SUFFIXES = ("_pos", "_neg", "_none")
+
+
+def _strip_sign_suffix(name: str) -> str:
+    """Strip any sign suffix (_pos, _neg, _none) from a delta shape name."""
+    for suffix in SIGN_SUFFIXES:
+        if name.endswith(suffix):
+            return name[: -len(suffix)]
+    return name
+
 
 @dataclass
 class DeltaItem:
@@ -107,7 +117,7 @@ def update_deltas(session, config: dict, inventory=None) -> int:
                         slide_index=sld_idx,
                         ole_source_full=ole_shp.LinkFormat.SourceFullName,
                         ole_name=ole_name,
-                        delt_name=delt.Name,
+                        delt_name=_strip_sign_suffix(delt.Name),
                         delt_left=delt.Left,
                         delt_top=delt.Top,
                         delt_width=delt.Width,
@@ -134,7 +144,7 @@ def update_deltas(session, config: dict, inventory=None) -> int:
                             slide_index=sld_idx,
                             ole_source_full=shp.LinkFormat.SourceFullName,
                             ole_name=shp.Name,
-                            delt_name=delt.Name,
+                            delt_name=_strip_sign_suffix(delt.Name),
                             delt_left=delt.Left,
                             delt_top=delt.Top,
                             delt_width=delt.Width,
@@ -196,9 +206,9 @@ def update_deltas(session, config: dict, inventory=None) -> int:
         else:
             src_template = tmpl_none
 
-        # Delete old delt_ shape
+        # Delete old delt_ shape (may have sign suffix from prior run)
         for shp in slide.Shapes:
-            if shp.Name == item.delt_name:
+            if _strip_sign_suffix(shp.Name) == item.delt_name:
                 shp.Delete()
                 break
 
@@ -212,7 +222,7 @@ def update_deltas(session, config: dict, inventory=None) -> int:
         new_shape.Top = item.delt_top
         new_shape.Width = item.delt_width
         new_shape.Height = item.delt_height
-        new_shape.Name = item.delt_name
+        new_shape.Name = f"{item.delt_name}_{sign}"
 
         count += 1
         log.debug(

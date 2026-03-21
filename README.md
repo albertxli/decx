@@ -173,6 +173,8 @@ decx config                     Show all available --set keys and defaults
 decx steps                      Show all pipeline steps for use with --only
 
 decx run RUNFILE [-v]           Execute a Python runfile for batch processing
+
+decx check FILE [-e EXCEL] [-v] Validate PPT values against Excel source data
 ```
 
 ## Configuration
