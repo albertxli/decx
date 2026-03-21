@@ -175,6 +175,8 @@ decx steps                      Show all pipeline steps for use with --only
 decx run RUNFILE [-v]           Execute a Python runfile for batch processing
 
 decx check FILE [-e EXCEL] [-v] Validate PPT values against Excel source data
+
+decx clean [-f]                 Kill all PowerPoint and Excel processes
 ```
 
 ## Configuration

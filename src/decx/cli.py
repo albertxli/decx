@@ -659,6 +659,37 @@ def cmd_run(args: argparse.Namespace):
         )
 
 
+def cmd_clean(args: argparse.Namespace):
+    """Handle the 'clean' subcommand — kill zombie COM processes."""
+    import subprocess
+
+    force = getattr(args, "force", False)
+    if not force:
+        answer = input(
+            "This will close ALL PowerPoint and Excel instances. Continue? [y/N] "
+        )
+        if answer.lower() not in ("y", "yes"):
+            console.print("Cancelled.")
+            return
+
+    killed = []
+    for proc in ("POWERPNT.EXE", "EXCEL.EXE"):
+        result = subprocess.run(
+            ["taskkill", "/F", "/IM", proc],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode == 0:
+            killed.append(proc)
+        # returncode 128 = no matching processes (not an error)
+
+    if killed:
+        names = ", ".join(killed)
+        console.print(f"[green]Killed:[/green] {names}")
+    else:
+        console.print("No PowerPoint or Excel processes found.")
+
+
 def _print_check_result(result, label: str | None = None):
     """Print a CheckResult as Rich tables."""
     if label:
@@ -1026,6 +1057,15 @@ def main():
         "--verbose", "-v", action="store_true", help="Enable debug logging"
     )
 
+    # --- clean subcommand ---
+    clean_parser = subparsers.add_parser(
+        "clean",
+        help="Kill all PowerPoint and Excel processes",
+    )
+    clean_parser.add_argument(
+        "--force", "-f", action="store_true", help="Skip confirmation prompt"
+    )
+
     args = parser.parse_args()
 
     if args.command == "update":
@@ -1040,6 +1080,8 @@ def main():
         cmd_run(args)
     elif args.command == "check":
         cmd_check(args)
+    elif args.command == "clean":
+        cmd_clean(args)
     else:
         parser.print_help()
         sys.exit(0)
