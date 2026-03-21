@@ -1,0 +1,26 @@
+# Heatmap 3-color scale (htmp_ tables)
+heatmap:
+  color_minimum: "#F8696B"   # Red
+  color_midpoint: "#FFEB84"  # Yellow
+  color_maximum: "#63BE7B"   # Green
+  dark_font: "#000000"       # Black
+  light_font: "#FFFFFF"      # White
+
+# Color coding for _ccst tables
+ccst:
+  positive_color: "#33CC33"  # Green
+  negative_color: "#ED0590"  # Red/pink
+  neutral_color: "#595959"   # Grey
+  positive_prefix: "+"
+  symbol_removal: "%"        # Characters to strip after coloring (any combo of +, -, %)
+
+# Delta indicator template shape names
+delta:
+  template_positive: "tmpl_delta_pos"
+  template_negative: "tmpl_delta_neg"
+  template_none: "tmpl_delta_none"
+  template_slide: 1          # Which slide holds the templates
+
+# Link update settings
+links:
+  set_manual: true           # Set links to ppUpdateOptionManual
