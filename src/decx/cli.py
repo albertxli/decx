@@ -11,7 +11,7 @@ from collections import Counter
 
 import yaml
 from rich.console import Console
-from rich.progress import Progress, TextColumn, TimeElapsedColumn
+from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 from rich.table import Table
 
 from decx import __version__
@@ -183,17 +183,26 @@ def _run_pairs(pairs: list[tuple[str, str]], config: dict, args: argparse.Namesp
 
         pptx_name = os.path.basename(pptx_path)
         excel_name = os.path.basename(excel_path)
-        console.print(
-            f"\n[bold]Processing ({idx}/{total_files}):[/bold] "
-            f"{pptx_name} <- {excel_name}"
-        )
 
         t_file = time.perf_counter()
-        results = process_presentation(actual_path, excel_path, config, args)
+
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            TimeElapsedColumn(),
+            console=console,
+        ) as progress:
+            progress.add_task(
+                f"Processing ({idx}/{total_files}): "
+                f"{pptx_name} <- {excel_name}",
+                total=None,
+            )
+            results = process_presentation(actual_path, excel_path, config, args)
+
         elapsed = time.perf_counter() - t_file
 
         # Per-file summary
-        console.print(f"  Done in {elapsed:.2f}s")
+        console.print(f"\n{pptx_name} <- {excel_name} ({elapsed:.2f}s)")
         console.print(_make_summary_table(results))
 
         for key in grand_total:
@@ -350,7 +359,7 @@ def cmd_info(args: argparse.Namespace):
     t.add_column("Shape Name")
     t.add_column("Found", justify="center")
     for name in template_names:
-        found = "Yes" if template_found[name] else "No"
+        found = "\u2713" if template_found[name] else "\u2717"
         t.add_row(name, found)
     console.print(t)
 

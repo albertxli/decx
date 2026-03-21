@@ -158,10 +158,10 @@ print(constants.ppUpdateOptionAutomatic) # 2
 
 ---
 
-## 14. Rich Library Unicode Spinner Crashes on cp1252 Terminals
+## 14. Rich Library Unicode in Claude Code's Terminal vs User's Bash
 
-**Problem:** `rich.progress.SpinnerColumn()` uses Braille Unicode characters (`\u280b`, etc.) for the spinner animation. Windows terminals using cp1252 encoding can't render these, causing `UnicodeEncodeError`.
+**Problem:** Claude Code's terminal uses cp1252 encoding, which can't render rich's Unicode spinner characters. This caused `UnicodeEncodeError` during development.
 
-**Fix:** Don't use `SpinnerColumn`. Use plain text progress instead. Also avoid Unicode symbols like `✓` (`\u2713`) and `✗` (`\u2717`) — use "Yes"/"No" instead.
+**Reality:** The user runs bash which handles Unicode fine. The cp1252 issue is only in Claude Code's testing environment, not the user's actual terminal.
 
-**Rule:** All CLI output must be ASCII-safe for Windows cp1252 terminals. Test with Claude Code's terminal which uses cp1252.
+**Rule:** Use Unicode freely in the CLI (spinners, checkmarks, etc.). If Claude Code's terminal crashes on Unicode output, that's a testing limitation — the actual user won't see it.
