@@ -55,11 +55,12 @@ def update_links(session, excel_path: str, config: dict, inventory=None) -> int:
             if set_manual:
                 shp.LinkFormat.AutoUpdate = PP_UPDATE_OPTION_MANUAL
 
-            # Per-shape refresh — faster than bulk UpdateLinks() for this workload
-            shp.LinkFormat.Update()
+            # Skip LinkFormat.Update() — OLE visuals are hidden behind ntbl_ tables
+            # and refreshing each one is very slow (~4s/shape for remote files).
+            # Tables and charts get fresh data from our pipeline instead.
 
             updated += 1
-            log.debug("Slide %d | Updated link: %s", _slide.SlideIndex, shp.Name)
+            log.debug("Slide %d | Repointed link: %s", _slide.SlideIndex, shp.Name)
         except Exception as e:
             try:
                 shape_name = shp.Name

@@ -165,3 +165,17 @@ print(constants.ppUpdateOptionAutomatic) # 2
 **Reality:** The user runs bash which handles Unicode fine. The cp1252 issue is only in Claude Code's testing environment, not the user's actual terminal.
 
 **Rule:** Use Unicode freely in the CLI (spinners, checkmarks, etc.). If Claude Code's terminal crashes on Unicode output, that's a testing limitation — the actual user won't see it.
+
+---
+
+## 15. LinkFormat.Update() is Extremely Slow for Remote Excel Files
+
+**Problem:** `shp.LinkFormat.Update()` forces PowerPoint to fetch data from the Excel file and re-render the OLE visual. For each of 86 shapes, this takes ~0.1s for local files but **~4s for files in a different folder** (especially Synology Drive/network paths). Total: 86 x 4s = **344s (5.7 minutes)** just for the link update step.
+
+**Why:** PowerPoint launches its own Excel connection per update. When the file path is remote or on a slow drive, each connection has latency.
+
+**Fix:** Skip `LinkFormat.Update()` entirely. Just repoint `SourceFullName` and set `AutoUpdate = 1` (manual). OLE visuals show stale cached images, but they're hidden behind ntbl_ tables anyway. Our pipeline populates tables and charts with fresh data.
+
+**Impact:** Remote file: 350s+ (frozen) -> 35s. Local file: saves ~3-4s.
+
+**Rule:** Never call `LinkFormat.Update()` — it's the single biggest performance killer for remote files.
