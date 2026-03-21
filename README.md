@@ -167,6 +167,7 @@ decx update [FILES] [OPTIONS]   Run the update pipeline
   --skip-coloring               Skip _ccst color coding
   --skip-charts                 Skip chart link updates
   -v, --verbose                 Debug logging
+  --set KEY=VALUE               Override config value (repeatable, dot notation)
 
 decx info FILE                  Inspect a .pptx file (read-only, no Excel needed)
 
@@ -175,7 +176,35 @@ decx init                       Write default config.yaml to current directory
 
 ## Configuration
 
-`decx` ships with sensible defaults. Run `decx init` to generate a `config.yaml` you can customize:
+`decx` ships with sensible defaults. Run `decx init` to generate a `config.yaml` you can customize.
+
+Any config value can also be overridden from the CLI with `--set`:
+
+```bash
+decx update report.pptx -e data.xlsx --set ccst.positive_prefix="" --set links.set_manual=false
+```
+
+### Available `--set` keys
+
+| Key | Default | Description |
+|---|---|---|
+| `heatmap.color_minimum` | `#F8696B` | Heatmap low color (red) |
+| `heatmap.color_midpoint` | `#FFEB84` | Heatmap mid color (yellow) |
+| `heatmap.color_maximum` | `#63BE7B` | Heatmap high color (green) |
+| `heatmap.dark_font` | `#000000` | Dark font for light heatmap cells |
+| `heatmap.light_font` | `#FFFFFF` | Light font for dark heatmap cells |
+| `ccst.positive_color` | `#33CC33` | Font color for positive numbers |
+| `ccst.negative_color` | `#ED0590` | Font color for negative numbers |
+| `ccst.neutral_color` | `#595959` | Font color for zero / non-numeric |
+| `ccst.positive_prefix` | `+` | Prefix for positive numbers (set `""` to disable) |
+| `ccst.symbol_removal` | `%` | Characters to strip after coloring (any combo of `+`, `-`, `%`) |
+| `delta.template_positive` | `tmpl_delta_pos` | Positive delta template shape name |
+| `delta.template_negative` | `tmpl_delta_neg` | Negative delta template shape name |
+| `delta.template_none` | `tmpl_delta_none` | No-change delta template shape name |
+| `delta.template_slide` | `1` | Slide number where delta templates live |
+| `links.set_manual` | `true` | Set OLE links to manual update mode |
+
+### config.yaml format
 
 ```yaml
 heatmap:
