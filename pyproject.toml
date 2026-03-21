@@ -23,6 +23,7 @@ dependencies = [
 
 [project.scripts]
 decx = "decx.cli:main"
+dx = "decx.cli:main"
 
 [project.urls]
 Repository = "https://github.com/albertxli/decx"
