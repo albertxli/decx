@@ -4,12 +4,54 @@ import logging
 import re
 import xml.etree.ElementTree as ET
 import zipfile
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from decx.delta_updater import _determine_sign, SIGN_SUFFIXES
 from decx.utils import extract_link_parts
 
 log = logging.getLogger(__name__)
+
+
+@dataclass
+class CheckResult:
+    """Aggregated results from a single check run."""
+
+    tbl_checked: int = 0
+    tbl_mismatches: list = field(default_factory=list)
+    delt_checked: int = 0
+    delt_mismatches: list = field(default_factory=list)
+    num_charts: int = 0
+    chart_series_checked: int = 0
+    chart_mismatches: list = field(default_factory=list)
+
+    @property
+    def total_checked(self):
+        return self.tbl_checked + self.delt_checked + self.chart_series_checked
+
+    @property
+    def all_mismatches(self):
+        return self.tbl_mismatches + self.delt_mismatches + self.chart_mismatches
+
+    @property
+    def passed(self):
+        return len(self.all_mismatches) == 0
+
+
+def run_check(session, config, inventory, excel_override=None):
+    """Run all checks (tables, deltas, charts) and return a CheckResult."""
+    result = CheckResult()
+
+    result.tbl_checked, result.tbl_mismatches = check_tables(
+        session, config, inventory, excel_override=excel_override
+    )
+    result.delt_checked, result.delt_mismatches = check_deltas(
+        session, config, inventory, excel_override=excel_override
+    )
+    result.num_charts, result.chart_series_checked, result.chart_mismatches = (
+        check_charts(session, config, inventory, excel_override=excel_override)
+    )
+
+    return result
 
 
 @dataclass

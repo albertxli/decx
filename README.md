@@ -300,6 +300,9 @@ After running the pipeline, use `decx check` to verify that PPT values match the
 decx check report.pptx                    # check against current OLE links
 decx check report.pptx --excel data.xlsx   # check against specific Excel file
 decx check report.pptx -v                  # verbose — show every cell checked
+decx check batch.py                        # check all jobs in a runfile
+decx check batch.py -v                     # verbose runfile check
+decx run batch.py --check                  # update + check after each job
 ```
 
 `decx check` validates three categories:

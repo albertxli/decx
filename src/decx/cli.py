@@ -618,11 +618,90 @@ def cmd_run(args: argparse.Namespace):
     console.print(f"\nRunfile: {os.path.basename(args.runfile)} ({len(pairs)} job(s))")
     _run_pairs(pairs, config, opts)
 
+    # Post-update check if --check flag
+    if getattr(args, "check", False):
+        console.print("\n[bold]Running post-update checks...[/bold]")
+        check_passed = 0
+        check_failed = 0
+        for job in spec.jobs:
+            console.print(f"\n[bold]{job.name}[/bold]")
+            result = _check_single_file(job.output, job.excel, config)
+            _print_check_result(result)
+            if result.passed:
+                check_passed += 1
+            else:
+                check_failed += 1
+
+        summary_color = "red" if check_failed else "green"
+        console.print(
+            f"\n[bold {summary_color}]Check Summary: {len(spec.jobs)} job(s), "
+            f"{check_passed} passed, {check_failed} failed"
+            f"[/bold {summary_color}]"
+        )
+
+
+def _print_check_result(result, label: str | None = None):
+    """Print a CheckResult as Rich tables."""
+    if label:
+        console.print(f"\n{label}")
+
+    # Summary table
+    console.print("\nResults")
+    t = Table(show_header=True)
+    t.add_column("Check")
+    t.add_column("Checked", justify="right")
+    t.add_column("Mismatches", justify="right")
+    t.add_column("Status", justify="center")
+
+    tbl_status = "[red]FAIL[/red]" if result.tbl_mismatches else "[green]PASS[/green]"
+    delt_status = "[red]FAIL[/red]" if result.delt_mismatches else "[green]PASS[/green]"
+    chart_status = (
+        "[red]FAIL[/red]" if result.chart_mismatches else "[green]PASS[/green]"
+    )
+    chart_label = f"{result.num_charts} ({result.chart_series_checked} series)"
+    t.add_row(
+        "Tables",
+        str(result.tbl_checked),
+        str(len(result.tbl_mismatches)),
+        tbl_status,
+    )
+    t.add_row(
+        "Deltas",
+        str(result.delt_checked),
+        str(len(result.delt_mismatches)),
+        delt_status,
+    )
+    t.add_row(
+        "Charts",
+        chart_label,
+        str(len(result.chart_mismatches)),
+        chart_status,
+    )
+    console.print(t)
+
+    # Mismatch details table
+    if result.all_mismatches:
+        console.print("\nMismatches")
+        mt = Table(show_header=True)
+        mt.add_column("Slide", justify="right")
+        mt.add_column("Shape")
+        mt.add_column("Detail")
+        for m in result.all_mismatches:
+            mt.add_row(str(m.slide), m.shape_name, m.detail)
+        console.print(mt)
+
+
+def _check_single_file(pptx_path: str, excel_path: str | None, config: dict):
+    """Run check on a single PPTX file. Returns a CheckResult."""
+    from decx.checker import run_check
+
+    with Session(pptx_path, excel_path=None, read_only=True) as session:
+        inventory = build_presentation_inventory(session.presentation)
+        return run_check(session, config, inventory, excel_override=excel_path)
+
 
 def cmd_check(args: argparse.Namespace):
     """Handle the 'check' subcommand — validate PPT values against Excel."""
-    from decx.checker import check_tables, check_deltas, check_charts
-
     # Logging
     if args.verbose:
         logging.basicConfig(
@@ -633,7 +712,19 @@ def cmd_check(args: argparse.Namespace):
     else:
         logging.basicConfig(level=logging.CRITICAL)
 
-    pptx_path = os.path.abspath(args.presentation)
+    target = args.presentation
+    config = get_config()
+
+    # Detect runfile mode (.py) vs single file mode (.pptx)
+    if target.endswith(".py"):
+        _cmd_check_runfile(target, config, args)
+    else:
+        _cmd_check_single(target, config, args)
+
+
+def _cmd_check_single(target: str, config: dict, args):
+    """Check a single PPTX file."""
+    pptx_path = os.path.abspath(target)
     if not os.path.exists(pptx_path):
         console.print(f"[red]Error:[/red] File not found: {pptx_path}")
         sys.exit(1)
@@ -645,63 +736,65 @@ def cmd_check(args: argparse.Namespace):
             console.print(f"[red]Error:[/red] Excel file not found: {excel_path}")
             sys.exit(1)
 
-    config = get_config()
-
     console.print(f"\nCheck: {os.path.basename(pptx_path)}")
+    result = _check_single_file(pptx_path, excel_path, config)
+    _print_check_result(result)
 
-    with Session(pptx_path, excel_path=None, read_only=True) as session:
-        inventory = build_presentation_inventory(session.presentation)
-
-        tbl_checked, tbl_mismatches = check_tables(
-            session, config, inventory, excel_override=excel_path
-        )
-        delt_checked, delt_mismatches = check_deltas(
-            session, config, inventory, excel_override=excel_path
-        )
-        num_charts, chart_series_checked, chart_mismatches = check_charts(
-            session, config, inventory, excel_override=excel_path
-        )
-
-    # Print results
-    all_mismatches = tbl_mismatches + delt_mismatches + chart_mismatches
-    total_checked = tbl_checked + delt_checked + chart_series_checked
-
-    # Summary table
-    console.print("\nResults")
-    t = Table(show_header=True)
-    t.add_column("Check")
-    t.add_column("Checked", justify="right")
-    t.add_column("Mismatches", justify="right")
-    t.add_column("Status", justify="center")
-
-    tbl_status = "[red]FAIL[/red]" if tbl_mismatches else "[green]PASS[/green]"
-    delt_status = "[red]FAIL[/red]" if delt_mismatches else "[green]PASS[/green]"
-    chart_status = "[red]FAIL[/red]" if chart_mismatches else "[green]PASS[/green]"
-    chart_label = f"{num_charts} ({chart_series_checked} series)"
-    t.add_row("Tables", str(tbl_checked), str(len(tbl_mismatches)), tbl_status)
-    t.add_row("Deltas", str(delt_checked), str(len(delt_mismatches)), delt_status)
-    t.add_row("Charts", chart_label, str(len(chart_mismatches)), chart_status)
-    console.print(t)
-
-    # Mismatch details table
-    if all_mismatches:
-        console.print("\nMismatches")
-        mt = Table(show_header=True)
-        mt.add_column("Slide", justify="right")
-        mt.add_column("Shape")
-        mt.add_column("Detail")
-        for m in all_mismatches:
-            mt.add_row(str(m.slide), m.shape_name, m.detail)
-        console.print(mt)
-
-    # Summary line
-    summary_color = "red" if all_mismatches else "green"
+    summary_color = "red" if result.all_mismatches else "green"
     console.print(
-        f"\n[bold {summary_color}]Summary: {total_checked} checked, "
-        f"{len(all_mismatches)} mismatch(es)[/bold {summary_color}]"
+        f"\n[bold {summary_color}]Summary: {result.total_checked} checked, "
+        f"{len(result.all_mismatches)} mismatch(es)[/bold {summary_color}]"
     )
 
-    if all_mismatches:
+    if result.all_mismatches:
+        sys.exit(1)
+
+
+def _cmd_check_runfile(target: str, config: dict, args):
+    """Check all jobs defined in a runfile."""
+    from decx.runfile import load_runfile
+
+    try:
+        spec = load_runfile(target)
+    except (ValueError, FileNotFoundError) as e:
+        console.print(f"[red]Error:[/red] {e}")
+        sys.exit(1)
+
+    console.print(f"\nCheck: {os.path.basename(target)} ({len(spec.jobs)} job(s))")
+
+    passed = 0
+    failed = 0
+    total_mismatches = 0
+
+    for job in spec.jobs:
+        if not os.path.exists(job.output):
+            console.print(
+                f"\n[yellow]{job.name}:[/yellow] output not found: {job.output} "
+                "(run decx run first)"
+            )
+            failed += 1
+            continue
+
+        console.print(f"\n[bold]{job.name}[/bold] <- {os.path.basename(job.excel)}")
+        result = _check_single_file(job.output, job.excel, config)
+        _print_check_result(result)
+
+        if result.passed:
+            passed += 1
+        else:
+            failed += 1
+            total_mismatches += len(result.all_mismatches)
+
+    # Grand summary
+    summary_color = "red" if failed else "green"
+    console.print(
+        f"\n[bold {summary_color}]Grand Summary: {len(spec.jobs)} job(s), "
+        f"{passed} passed, {failed} failed"
+        f"{f', {total_mismatches} mismatch(es)' if total_mismatches else ''}"
+        f"[/bold {summary_color}]"
+    )
+
+    if failed:
         sys.exit(1)
 
 
@@ -841,6 +934,11 @@ def main():
     run_parser.add_argument(
         "--verbose", "-v", action="store_true", help="Enable debug logging"
     )
+    run_parser.add_argument(
+        "--check",
+        action="store_true",
+        help="Run validation check after each job completes",
+    )
 
     # --- check subcommand ---
     check_parser = subparsers.add_parser(
@@ -851,12 +949,14 @@ def main():
             "  decx check report.pptx\n"
             "  decx check report.pptx --excel data.xlsx\n"
             "  decx check report.pptx -v\n"
+            "  decx check batch.py              (check all jobs in runfile)\n"
+            "  decx check batch.py -v\n"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     check_parser.add_argument(
         "presentation",
-        help="Path to the .pptx file to validate",
+        help="Path to a .pptx file or a .py runfile to validate",
     )
     check_parser.add_argument(
         "--excel",
