@@ -2,15 +2,17 @@
 
 ## Project
 
-Python rewrite of PowerPoint Excel report automation (from VBA). Uses `win32com` (pywin32) for COM automation.
+`decx` — Python rewrite of PowerPoint Excel report automation (from VBA). Uses `win32com` (pywin32) for COM automation.
 
 ## Key Commands
 
 ```bash
-uv run python main.py "report.pptx" --excel "data.xlsx"       # Run automation
-uv run pytest tests/ -k "not integration"                       # Unit tests (fast, no COM)
-uv run pytest tests/ -k integration                             # Integration tests (needs PPT+Excel)
-taskkill /F /IM POWERPNT.EXE & taskkill /F /IM EXCEL.EXE       # Kill zombie COM processes
+decx update "report.pptx" --excel "data.xlsx"             # Run automation
+decx init                                                   # Write default config.yaml
+decx info                                                   # Show project info (coming soon)
+uv run pytest tests/ -k "not integration"                   # Unit tests (fast, no COM)
+uv run pytest tests/ -k integration                         # Integration tests (needs PPT+Excel)
+taskkill /F /IM POWERPNT.EXE & taskkill /F /IM EXCEL.EXE   # Kill zombie COM processes
 ```
 
 ## Critical Rules
@@ -28,8 +30,11 @@ taskkill /F /IM POWERPNT.EXE & taskkill /F /IM EXCEL.EXE       # Kill zombie COM
 ## Architecture
 
 ```
-main.py                    → CLI entry point, batch orchestration
-ppt_automation/
+main.py                    → Thin shim: from decx.cli import main
+src/decx/
+  __init__.py              → __version__, re-exports load_config / DEFAULT_CONFIG
+  cli.py                   → CLI entry point with subcommands (update, info, init)
+  config.py                → DEFAULT_CONFIG dict + load_config()
   session.py               → COM lifecycle (DispatchEx + dialog auto-dismiss)
   linker.py                → Step 1a: re-point OLE links
   table_updater.py         → Step 1b: populate PPT tables from Excel
@@ -40,7 +45,7 @@ ppt_automation/
   formatting.py            → Table formatting extract/apply
   utils.py                 → Hex→RGB, R1C1→A1, contrast color
   file_picker.py           → Optional tkinter file dialog (removable)
-config.yaml                → All configurable settings
+config.yaml                → Optional override config (or use decx init to generate)
 ```
 
 ## Test Files

@@ -3,13 +3,13 @@
 import logging
 import os
 
-from ppt_automation.formatting import extract_formatting, extract_formatting_minimal, apply_formatting
-from ppt_automation.shape_finder import (
+from decx.formatting import extract_formatting, extract_formatting_minimal, apply_formatting
+from decx.shape_finder import (
     MSO_LINKED_OLE_OBJECT,
     find_table_shape,
     find_delt_shape,
 )
-from ppt_automation.utils import (
+from decx.utils import (
     extract_link_parts,
     hex_to_rgb,
     get_contrast_font_color,

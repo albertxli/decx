@@ -2,7 +2,7 @@
 
 import logging
 
-from ppt_automation.utils import hex_to_rgb
+from decx.utils import hex_to_rgb
 
 log = logging.getLogger(__name__)
 

@@ -3,7 +3,7 @@
 Tests the internal helper functions that don't require COM objects.
 """
 
-from ppt_automation.color_coder import _is_numeric, _validate_symbol_removal
+from decx.color_coder import _is_numeric, _validate_symbol_removal
 
 
 class TestIsNumeric:

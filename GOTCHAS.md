@@ -16,7 +16,7 @@ Hard-won knowledge from debugging COM automation with PowerPoint and Excel via p
 
 **What works:** A background thread using `win32gui.EnumWindows()` that polls for the dialog by window title and sends `WM_CLOSE` to dismiss it. Start the thread **before** calling `Presentations.Open()`.
 
-See: `ppt_automation/session.py` — `_auto_dismiss_security_dialog()`
+See: `decx/session.py` — `_auto_dismiss_security_dialog()`
 
 ---
 

@@ -1,6 +1,6 @@
-"""Unit tests for ppt_automation.utils — no COM required."""
+"""Unit tests for decx.utils — no COM required."""
 
-from ppt_automation.utils import (
+from decx.utils import (
     hex_to_rgb,
     convert_r1c1_to_a1,
     extract_link_parts,

@@ -4,13 +4,13 @@ import logging
 import os
 from dataclasses import dataclass
 
-from ppt_automation.shape_finder import (
+from decx.shape_finder import (
     MSO_LINKED_OLE_OBJECT,
     find_delt_shape,
     find_table_shape,
     find_template_shape,
 )
-from ppt_automation.utils import extract_link_parts
+from decx.utils import extract_link_parts
 
 log = logging.getLogger(__name__)
 
