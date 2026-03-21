@@ -666,7 +666,8 @@ def cmd_clean(args: argparse.Namespace):
     force = getattr(args, "force", False)
     if not force:
         answer = input(
-            "This will close ALL PowerPoint and Excel instances. Continue? [y/N] "
+            "This will force-kill ALL PowerPoint and Excel instances.\n"
+            "Unsaved work will be lost. Continue? [y/N] "
         )
         if answer.lower() not in ("y", "yes"):
             console.print("Cancelled.")
@@ -1060,7 +1061,7 @@ def main():
     # --- clean subcommand ---
     clean_parser = subparsers.add_parser(
         "clean",
-        help="Kill all PowerPoint and Excel processes",
+        help="Force-kill all PowerPoint and Excel processes (unsaved work will be lost)",
     )
     clean_parser.add_argument(
         "--force", "-f", action="store_true", help="Skip confirmation prompt"
