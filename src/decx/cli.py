@@ -143,9 +143,11 @@ def process_presentation(
     collector.setFormatter(logging.Formatter("%(message)s"))
     decx_logger = logging.getLogger("decx")
     decx_logger.addHandler(collector)
-    # Ensure WARNING+ messages reach the collector even when root is CRITICAL
-    if decx_logger.level > logging.WARNING or decx_logger.level == 0:
-        decx_logger.setLevel(logging.WARNING)
+    decx_logger.setLevel(logging.WARNING)
+    # Stop errors from propagating to root logger (prevents stderr leak during spinner)
+    old_propagate = decx_logger.propagate
+    if not getattr(args, "verbose", False):
+        decx_logger.propagate = False
 
     try:
         with Session(pptx_path, excel_path) as session:
@@ -177,7 +179,8 @@ def process_presentation(
 
             session.save()
     finally:
-        logging.getLogger("decx").removeHandler(collector)
+        decx_logger.removeHandler(collector)
+        decx_logger.propagate = old_propagate
 
     return results, collector.errors
 
