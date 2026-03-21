@@ -146,7 +146,7 @@ def process_presentation(
     decx_logger.setLevel(logging.WARNING)
     # Stop errors from propagating to root logger (prevents stderr leak during spinner)
     old_propagate = decx_logger.propagate
-    if not getattr(args, "verbose", False):
+    if not getattr(options, "verbose", False):
         decx_logger.propagate = False
 
     try:
