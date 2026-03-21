@@ -265,7 +265,7 @@ def _run_pairs(pairs: list[tuple[str, str]], config: dict, args: argparse.Namesp
         if not os.path.exists(pptx_path):
             console.print(f"[yellow]PPT not found, skipping:[/yellow] {pptx_path}")
             continue
-        if not os.path.exists(excel_path):
+        if excel_path and not os.path.exists(excel_path):
             console.print(f"[yellow]Excel not found, skipping:[/yellow] {excel_path}")
             continue
 
@@ -275,7 +275,7 @@ def _run_pairs(pairs: list[tuple[str, str]], config: dict, args: argparse.Namesp
         )
 
         pptx_name = os.path.basename(pptx_path)
-        excel_name = os.path.basename(excel_path)
+        excel_name = os.path.basename(excel_path) if excel_path else "(no Excel)"
         verbose = getattr(args, "verbose", False)
 
         t_file = time.perf_counter()
