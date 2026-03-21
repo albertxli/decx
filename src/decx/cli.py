@@ -140,8 +140,12 @@ def process_presentation(
 
     # Collect warnings/errors during processing
     collector = _ErrorCollector()
-    collector.setFormatter(logging.Formatter("%(name)s: %(message)s"))
-    logging.getLogger("decx").addHandler(collector)
+    collector.setFormatter(logging.Formatter("%(message)s"))
+    decx_logger = logging.getLogger("decx")
+    decx_logger.addHandler(collector)
+    # Ensure WARNING+ messages reach the collector even when root is CRITICAL
+    if decx_logger.level > logging.WARNING or decx_logger.level == 0:
+        decx_logger.setLevel(logging.WARNING)
 
     try:
         with Session(pptx_path, excel_path) as session:
@@ -209,6 +213,7 @@ def _run_pairs(pairs: list[tuple[str, str]], config: dict, args: argparse.Namesp
             TextColumn("[progress.description]{task.description}"),
             TimeElapsedColumn(),
             console=console,
+            transient=True,  # spinner line disappears when done
         ) as progress:
             progress.add_task(
                 f"Processing ({idx}/{total_files}): "
@@ -237,14 +242,18 @@ def _run_pairs(pairs: list[tuple[str, str]], config: dict, args: argparse.Namesp
 
 def cmd_update(args: argparse.Namespace):
     """Handle the 'update' subcommand — main pipeline."""
-    # Logging — suppress INFO by default so spinner stays clean.
-    # Use -v for full logging output.
-    level = logging.DEBUG if args.verbose else logging.WARNING
-    logging.basicConfig(
-        level=level,
-        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-        datefmt="%H:%M:%S",
-    )
+    # Logging — suppress ALL console logging by default so spinner stays clean.
+    # Errors are captured by _ErrorCollector and shown in red after the spinner.
+    # Use -v for full logging output to stderr.
+    if args.verbose:
+        logging.basicConfig(
+            level=logging.DEBUG,
+            format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+            datefmt="%H:%M:%S",
+        )
+    else:
+        # Silence all stderr logging — errors go through our collector instead
+        logging.basicConfig(level=logging.CRITICAL)
 
     # Config
     config = load_config(args.config)
