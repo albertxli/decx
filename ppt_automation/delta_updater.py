@@ -45,12 +45,15 @@ def _determine_sign(value: str) -> str:
         return "none"
 
 
-def update_deltas(session, config: dict) -> int:
+def update_deltas(session, config: dict, inventory=None) -> int:
     """Apply delta indicator arrows based on linked values.
 
     Uses a two-pass approach:
       Pass 1: Collect OLE shapes with matching delt_ shapes (no modifications)
       Pass 2: Process collected items (delete old, paste new template)
+
+    When inventory is provided, Pass 1 uses the pre-built delts dict
+    for O(1) lookups instead of scanning slides.
 
     Returns the count of deltas updated.
     """
@@ -83,29 +86,52 @@ def update_deltas(session, config: dict) -> int:
 
     # === PASS 1: Collect ===
     items: list[DeltaItem] = []
-    for sld_idx in range(2, pres.Slides.Count + 1):  # skip template slide
-        slide = pres.Slides(sld_idx)
-        for shp in slide.Shapes:
-            if shp.Type != MSO_LINKED_OLE_OBJECT:
-                continue
-            try:
-                if "Excel.Sheet" not in shp.OLEFormat.ProgID:
-                    continue
-            except Exception:
-                continue
 
-            delt = find_delt_shape(slide, shp.Name)
+    if inventory is not None:
+        # Use inventory: iterate only OLE shapes that have a delt_ match
+        for slide, ole_shp in inventory.ole_shapes:
+            ole_name = ole_shp.Name
+            delt = inventory.delts.get(ole_name)
             if delt is not None:
+                # Find the slide index for this slide
+                sld_idx = slide.SlideIndex
+                if sld_idx <= 1:
+                    continue  # skip template slide
                 items.append(DeltaItem(
                     slide_index=sld_idx,
-                    ole_source_full=shp.LinkFormat.SourceFullName,
-                    ole_name=shp.Name,
+                    ole_source_full=ole_shp.LinkFormat.SourceFullName,
+                    ole_name=ole_name,
                     delt_name=delt.Name,
                     delt_left=delt.Left,
                     delt_top=delt.Top,
                     delt_width=delt.Width,
                     delt_height=delt.Height,
                 ))
+    else:
+        # Fallback: scan slides (backward compatibility)
+        for sld_idx in range(2, pres.Slides.Count + 1):  # skip template slide
+            slide = pres.Slides(sld_idx)
+            for shp in slide.Shapes:
+                if shp.Type != MSO_LINKED_OLE_OBJECT:
+                    continue
+                try:
+                    if "Excel.Sheet" not in shp.OLEFormat.ProgID:
+                        continue
+                except Exception:
+                    continue
+
+                delt = find_delt_shape(slide, shp.Name)
+                if delt is not None:
+                    items.append(DeltaItem(
+                        slide_index=sld_idx,
+                        ole_source_full=shp.LinkFormat.SourceFullName,
+                        ole_name=shp.Name,
+                        delt_name=delt.Name,
+                        delt_left=delt.Left,
+                        delt_top=delt.Top,
+                        delt_width=delt.Width,
+                        delt_height=delt.Height,
+                    ))
 
     # === PASS 2: Process ===
     count = 0
@@ -115,7 +141,12 @@ def update_deltas(session, config: dict) -> int:
         got_value = False
 
         # Primary: read from existing ntbl_/htmp_/trns_ table
-        tbl_shape, _ = find_table_shape(slide, item.ole_name)
+        if inventory is not None:
+            tbl_entry = inventory.tables.get(item.ole_name)
+            tbl_shape = tbl_entry[0] if tbl_entry is not None else None
+        else:
+            tbl_shape, _ = find_table_shape(slide, item.ole_name)
+
         if tbl_shape is not None and tbl_shape.HasTable:
             try:
                 cell_value = tbl_shape.Table.Cell(1, 1).Shape.TextFrame.TextRange.Text.strip()

@@ -11,6 +11,7 @@ import yaml
 
 from ppt_automation.session import Session
 from ppt_automation import linker, table_updater, delta_updater, color_coder, chart_updater
+from ppt_automation.shape_finder import build_presentation_inventory
 
 
 def load_config(config_path: str) -> dict:
@@ -78,19 +79,32 @@ def process_presentation(
     results = {"links": 0, "tables": 0, "deltas": 0, "colors": 0, "charts": 0}
 
     with Session(pptx_path, excel_path) as session:
-        if not options.skip_links:
-            results["links"] = linker.update_links(session, excel_path, config)
+        # Build shape inventory ONCE — all steps use O(1) lookups from this
+        inventory = build_presentation_inventory(session.presentation)
 
-        results["tables"] = table_updater.update_tables(session, config)
+        if not options.skip_links:
+            results["links"] = linker.update_links(
+                session, excel_path, config, inventory=inventory
+            )
+
+        results["tables"] = table_updater.update_tables(
+            session, config, inventory=inventory
+        )
 
         if not options.skip_deltas:
-            results["deltas"] = delta_updater.update_deltas(session, config)
+            results["deltas"] = delta_updater.update_deltas(
+                session, config, inventory=inventory
+            )
 
         if not options.skip_coloring:
-            results["colors"] = color_coder.apply_color_coding(session, config)
+            results["colors"] = color_coder.apply_color_coding(
+                session, config, inventory=inventory
+            )
 
         if not options.skip_charts:
-            results["charts"] = chart_updater.update_charts(session, excel_path)
+            results["charts"] = chart_updater.update_charts(
+                session, excel_path, inventory=inventory
+            )
 
         session.save()
 

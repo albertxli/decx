@@ -56,6 +56,7 @@ class TestFullPipeline:
         """Run full pipeline on template + Argentina data, verify no errors."""
         import yaml
         from ppt_automation.session import Session
+        from ppt_automation.shape_finder import build_presentation_inventory
         from ppt_automation import linker, table_updater, delta_updater, color_coder, chart_updater
 
         config_path = os.path.join(
@@ -71,11 +72,12 @@ class TestFullPipeline:
 
         try:
             with Session(pptx_copy, excel_path) as session:
-                links = linker.update_links(session, excel_path, config)
-                tables = table_updater.update_tables(session, config)
-                deltas = delta_updater.update_deltas(session, config)
-                colors = color_coder.apply_color_coding(session, config)
-                charts = chart_updater.update_charts(session, excel_path)
+                inventory = build_presentation_inventory(session.presentation)
+                links = linker.update_links(session, excel_path, config, inventory=inventory)
+                tables = table_updater.update_tables(session, config, inventory=inventory)
+                deltas = delta_updater.update_deltas(session, config, inventory=inventory)
+                colors = color_coder.apply_color_coding(session, config, inventory=inventory)
+                charts = chart_updater.update_charts(session, excel_path, inventory=inventory)
                 session.save()
 
             # Basic sanity: no exceptions raised, counts are non-negative
@@ -91,8 +93,8 @@ class TestFullPipeline:
         """Verify OLE links point to new Excel file after Step 1a."""
         import yaml
         from ppt_automation.session import Session
+        from ppt_automation.shape_finder import build_presentation_inventory, collect_linked_ole_shapes
         from ppt_automation import linker
-        from ppt_automation.shape_finder import collect_linked_ole_shapes
 
         config_path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -106,10 +108,11 @@ class TestFullPipeline:
 
         try:
             with Session(pptx_copy, excel_path) as session:
-                updated = linker.update_links(session, excel_path, config)
+                inventory = build_presentation_inventory(session.presentation)
+                updated = linker.update_links(session, excel_path, config, inventory=inventory)
 
                 if updated > 0:
-                    ole_shapes = collect_linked_ole_shapes(session.presentation)
+                    ole_shapes = inventory.ole_shapes
                     for _slide, shp in ole_shapes:
                         source = shp.LinkFormat.SourceFullName
                         # The file path portion should now reference the Mexico file
@@ -123,6 +126,7 @@ class TestFullPipeline:
         """Process template with all 3 Excel files sequentially."""
         import yaml
         from ppt_automation.session import Session
+        from ppt_automation.shape_finder import build_presentation_inventory
         from ppt_automation import linker, table_updater
 
         config_path = os.path.join(
@@ -142,8 +146,9 @@ class TestFullPipeline:
                 excel_abs = os.path.abspath(excel_path)
 
                 with Session(pptx_copy, excel_abs) as session:
-                    linker.update_links(session, excel_abs, config)
-                    table_updater.update_tables(session, config)
+                    inventory = build_presentation_inventory(session.presentation)
+                    linker.update_links(session, excel_abs, config, inventory=inventory)
+                    table_updater.update_tables(session, config, inventory=inventory)
                     session.save()
 
             # All 3 ran without errors

@@ -135,3 +135,13 @@ print(constants.ppUpdateOptionAutomatic) # 2
 **Rule:** Always verify COM constants from the type library, not from documentation or guesses. Use `win32com.client.constants` after `gencache.EnsureDispatch()`.
 
 **Impact:** ALL links (OLE worksheet objects AND charts) must be set to `AutoUpdate = 1` before saving, otherwise the security dialog appears on every open.
+
+---
+
+## 12. Bulk UpdateLinks() Can Be SLOWER Than Per-Shape Updates
+
+**Problem:** `presentation.UpdateLinks()` refreshes ALL links in one call, which sounds faster. But in practice with 86 OLE objects, it took ~230s per test vs ~50s with per-shape `LinkFormat.Update()`.
+
+**Why:** The bulk call appears to do a full presentation-wide refresh including re-rendering all OLE visuals, while per-shape updates are more targeted.
+
+**Rule:** Use per-shape `shp.LinkFormat.Update()` after repointing each link, not bulk `presentation.UpdateLinks()`.

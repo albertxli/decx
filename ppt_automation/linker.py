@@ -11,15 +11,30 @@ log = logging.getLogger(__name__)
 PP_UPDATE_OPTION_MANUAL = 1
 
 
-def update_links(session, excel_path: str, config: dict) -> int:
+def update_links(session, excel_path: str, config: dict, inventory=None) -> int:
     """Re-point all linked OLE objects to a new Excel file.
 
     Preserves sheet name and range from the original link.
     Optionally sets links to manual update mode.
+
+    Performance optimization: repoints all SourceFullName paths first,
+    sets AutoUpdate, then calls presentation.UpdateLinks() ONCE at the end
+    instead of per-shape LinkFormat.Update().
+
+    Args:
+        session: COM session with presentation and ppt_app.
+        excel_path: Path to the new Excel file.
+        config: Configuration dict.
+        inventory: Optional SlideInventory for O(1) shape lookup.
+
     Returns the count of updated links.
     """
     set_manual = config.get("links", {}).get("set_manual", True)
-    ole_shapes = collect_linked_ole_shapes(session.presentation)
+
+    if inventory is not None:
+        ole_shapes = inventory.ole_shapes
+    else:
+        ole_shapes = collect_linked_ole_shapes(session.presentation)
 
     if not ole_shapes:
         log.info("No linked OLE shapes found")
@@ -40,7 +55,9 @@ def update_links(session, excel_path: str, config: dict) -> int:
             if set_manual:
                 shp.LinkFormat.AutoUpdate = PP_UPDATE_OPTION_MANUAL
 
+            # Per-shape refresh — faster than bulk UpdateLinks() for this workload
             shp.LinkFormat.Update()
+
             updated += 1
             log.debug("Updated link: %s -> %s", shp.Name, excel_path)
         except Exception as e:

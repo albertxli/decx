@@ -175,6 +175,6 @@ class Session:
 
         # Release COM pointers and give OS time to clean up processes
         gc.collect()
-        time.sleep(1)
+        time.sleep(0.3)
 
         return False  # don't suppress exceptions

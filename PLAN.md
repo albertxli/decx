@@ -86,8 +86,16 @@ After each optimization step:
 3. Open output .pptx and verify data/formatting matches Phase 1 output
 4. Runtime benchmark: time the full pipeline on test template + Argentina Excel
 
-### Benchmark Tests (to add)
-- `tests/test_benchmark.py` — timed integration tests comparing Phase 1 vs Phase 2 runtime
-  - `test_benchmark_single_presentation` — time full pipeline on template + one Excel file
-  - `test_benchmark_batch_three_countries` — time 3-pair batch run
-  - Print elapsed times so we can track improvements
+### Benchmark Results
+
+| Metric | Phase 1 | Phase 2 | Improvement |
+|---|---|---|---|
+| Single presentation (30 slides, 86 OLE) | 50.86s | 39.52s | **22% faster** |
+| Unit tests | 58 pass (0.08s) | 58 pass (0.05s) | Same |
+| Integration tests | 3 pass | 3 pass | Same |
+
+**Key learnings:**
+- Skipping formatting extract/apply for ntbl_/trns_ tables was the biggest win (~200k COM calls eliminated)
+- Single-pass shape inventory eliminated ~8k redundant COM calls
+- Bulk `UpdateLinks()` was actually SLOWER than per-shape updates — reverted (GOTCHAS #12)
+- Reduced `time.sleep(1)` to `time.sleep(0.3)` saved 0.7s per file
