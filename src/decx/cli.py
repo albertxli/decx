@@ -9,13 +9,12 @@ import sys
 import time
 from collections import Counter
 
-import yaml
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 from rich.table import Table
 
 from decx import __version__
-from decx.config import load_config, DEFAULT_CONFIG
+from decx.config import get_config, DEFAULT_CONFIG
 from decx.session import Session
 from decx import linker, table_updater, delta_updater, color_coder, chart_updater
 from decx.shape_finder import build_presentation_inventory, find_template_shape
@@ -275,16 +274,12 @@ def cmd_update(args: argparse.Namespace):
         # Silence all stderr logging — errors go through our collector instead
         logging.basicConfig(level=logging.CRITICAL)
 
-    # Config
-    config = load_config(args.config)
-    if getattr(args, "set", None):
-        from decx.config import apply_overrides
-
-        try:
-            config = apply_overrides(config, args.set)
-        except ValueError as e:
-            console.print(f"[red]Config error:[/red] {e}")
-            sys.exit(1)
+    # Config — defaults + optional --set overrides
+    try:
+        config = get_config(getattr(args, "set", None))
+    except ValueError as e:
+        console.print(f"[red]Config error:[/red] {e}")
+        sys.exit(1)
 
     # --- Mode 1: --pair for explicit pptx:xlsx pairs ---
     if args.pair:
@@ -467,17 +462,6 @@ def _count_unlinked_in_shape(shape) -> int:
     return 0
 
 
-def cmd_init(args: argparse.Namespace):
-    """Handle the 'init' subcommand — write default config.yaml to current directory."""
-    output_path = os.path.join(os.getcwd(), "config.yaml")
-    if os.path.exists(output_path):
-        print(f"config.yaml already exists at {output_path}")
-        sys.exit(1)
-    with open(output_path, "w", encoding="utf-8") as f:
-        yaml.dump(DEFAULT_CONFIG, f, default_flow_style=False, sort_keys=False)
-    print(f"Wrote default config to {output_path}")
-
-
 def cmd_config():
     """Handle the 'config' subcommand — show all available --set keys."""
     t = Table(show_header=True)
@@ -547,12 +531,6 @@ def main():
         ),
     )
     update_parser.add_argument(
-        "--config",
-        "-c",
-        default=None,
-        help="Path to config.yaml (default: built-in defaults)",
-    )
-    update_parser.add_argument(
         "--skip-links", action="store_true", help="Skip Step 1a (re-link OLE)"
     )
     update_parser.add_argument(
@@ -587,9 +565,6 @@ def main():
         help="Path to the .pptx file to inspect",
     )
 
-    # --- init subcommand ---
-    subparsers.add_parser("init", help="Write default config.yaml to current directory")
-
     # --- config subcommand ---
     subparsers.add_parser(
         "config", help="Show all available --set keys and their defaults"
@@ -601,8 +576,6 @@ def main():
         cmd_update(args)
     elif args.command == "info":
         cmd_info(args)
-    elif args.command == "init":
-        cmd_init(args)
     elif args.command == "config":
         cmd_config()
     else:

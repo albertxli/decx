@@ -1,5 +1,6 @@
-import os
-import yaml
+"""Configuration defaults and --set override support."""
+
+import copy
 
 DEFAULT_CONFIG = {
     "heatmap": {
@@ -28,15 +29,6 @@ DEFAULT_CONFIG = {
 }
 
 
-def load_config(config_path: str | None = None) -> dict:
-    if config_path and os.path.exists(config_path):
-        with open(config_path, "r", encoding="utf-8") as f:
-            return yaml.safe_load(f)
-    import copy
-
-    return copy.deepcopy(DEFAULT_CONFIG)
-
-
 def _coerce_value(value: str):
     """Auto-convert string value to appropriate Python type."""
     if value.lower() == "true":
@@ -63,7 +55,6 @@ def apply_overrides(config: dict, overrides: list[str]) -> dict:
 
     Raises ValueError for invalid keys.
     """
-    # Build set of valid dot-paths from DEFAULT_CONFIG
     valid_keys = set()
     for section, values in DEFAULT_CONFIG.items():
         for key in values:
@@ -93,4 +84,12 @@ def apply_overrides(config: dict, overrides: list[str]) -> dict:
 
         config[section][name] = _coerce_value(value)
 
+    return config
+
+
+def get_config(overrides: list[str] | None = None) -> dict:
+    """Get config with defaults, optionally applying --set overrides."""
+    config = copy.deepcopy(DEFAULT_CONFIG)
+    if overrides:
+        apply_overrides(config, overrides)
     return config

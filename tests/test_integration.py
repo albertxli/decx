@@ -55,7 +55,7 @@ class TestFullPipeline:
 
     def test_process_single_presentation(self):
         """Run full pipeline on template + Argentina data, verify no errors."""
-        import yaml
+        from decx.config import get_config
         from decx.session import Session
         from decx.shape_finder import build_presentation_inventory
         from decx import (
@@ -66,12 +66,7 @@ class TestFullPipeline:
             chart_updater,
         )
 
-        config_path = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            "config.yaml",
-        )
-        with open(config_path, "r") as f:
-            config = yaml.safe_load(f)
+        config = get_config()
 
         # Work on a temp copy
         pptx_copy = _make_temp_copy(TEMPLATE_PPTX)
@@ -108,17 +103,12 @@ class TestFullPipeline:
 
     def test_link_update_changes_source(self):
         """Verify OLE links point to new Excel file after Step 1a."""
-        import yaml
+        from decx.config import get_config
         from decx.session import Session
         from decx.shape_finder import build_presentation_inventory
         from decx import linker
 
-        config_path = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            "config.yaml",
-        )
-        with open(config_path, "r") as f:
-            config = yaml.safe_load(f)
+        config = get_config()
 
         pptx_copy = _make_temp_copy(TEMPLATE_PPTX)
         excel_path = os.path.abspath(EXCEL_MEXICO)
@@ -143,17 +133,12 @@ class TestFullPipeline:
 
     def test_batch_mode_three_countries(self):
         """Process template with all 3 Excel files sequentially."""
-        import yaml
+        from decx.config import get_config
         from decx.session import Session
         from decx.shape_finder import build_presentation_inventory
         from decx import linker, table_updater
 
-        config_path = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            "config.yaml",
-        )
-        with open(config_path, "r") as f:
-            config = yaml.safe_load(f)
+        config = get_config()
 
         excel_files = [EXCEL_ARGENTINA, EXCEL_MEXICO, EXCEL_US]
         temp_copies = []
@@ -183,12 +168,12 @@ class TestFullPipeline:
         Regression test for GOTCHAS #16: Range.Value2 strips formatting.
         Slide 3 should contain percentage values in ntbl_ tables, not raw decimals.
         """
+        from decx.config import get_config
         from decx.session import Session
         from decx.shape_finder import build_presentation_inventory
-        from decx.config import load_config
         from decx import linker, table_updater
 
-        config = load_config()
+        config = get_config()
         pptx_copy = _make_temp_copy(TEMPLATE_PPTX)
         excel_path = os.path.abspath(EXCEL_ARGENTINA)
 

@@ -46,8 +46,8 @@ decx update --pair "us.pptx:us.xlsx" --pair "mx.pptx:mx.xlsx" -o output/
 # Skip specific steps
 decx update report.pptx --excel data.xlsx --skip-links --skip-charts
 
-# Use a custom config file
-decx update report.pptx --excel data.xlsx --config my_config.yaml
+# Override config values
+decx update report.pptx --excel data.xlsx --set ccst.positive_prefix=""
 
 # Verbose output for debugging
 decx update report.pptx --excel data.xlsx --verbose
@@ -136,14 +136,6 @@ Delta Templates (Slide 1)
 +-------------------------------------------+-------+
 ```
 
-### Initialize config
-
-Write the default `config.yaml` to the current directory:
-
-```bash
-decx init
-```
-
 ### Version
 
 ```bash
@@ -161,7 +153,6 @@ decx update [FILES] [OPTIONS]   Run the update pipeline
   -e, --excel PATH              Excel data file (or file picker opens)
   -p, --pair PPT:XLSX           Explicit pptx:xlsx pair (repeatable)
   -o, --output PATH             Output file (.pptx) or directory
-  -c, --config PATH             Custom config.yaml
   --skip-links                  Skip OLE re-linking
   --skip-deltas                 Skip delta indicator updates
   --skip-coloring               Skip _ccst color coding
@@ -171,14 +162,12 @@ decx update [FILES] [OPTIONS]   Run the update pipeline
 
 decx info FILE                  Inspect a .pptx file (read-only, no Excel needed)
 
-decx init                       Write default config.yaml to current directory
-
 decx config                     Show all available --set keys and defaults
 ```
 
 ## Configuration
 
-`decx` ships with sensible defaults. Run `decx init` to generate a `config.yaml` you can customize.
+`decx` ships with sensible defaults. Use `--set` to override values, or run `decx config` to see all available keys.
 
 Any config value can also be overridden from the CLI with `--set`:
 
@@ -205,33 +194,6 @@ decx update report.pptx -e data.xlsx --set ccst.positive_prefix="" --set links.s
 | `delta.template_none` | `tmpl_delta_none` | No-change delta template shape name |
 | `delta.template_slide` | `1` | Slide number where delta templates live |
 | `links.set_manual` | `true` | Set OLE links to manual update mode |
-
-### config.yaml format
-
-```yaml
-heatmap:
-  color_minimum: '#F8696B'
-  color_midpoint: '#FFEB84'
-  color_maximum: '#63BE7B'
-  dark_font: '#000000'
-  light_font: '#FFFFFF'
-
-ccst:
-  positive_color: '#33CC33'
-  negative_color: '#ED0590'
-  neutral_color: '#595959'
-  positive_prefix: '+'
-  symbol_removal: '%'
-
-delta:
-  template_positive: tmpl_delta_pos
-  template_negative: tmpl_delta_neg
-  template_none: tmpl_delta_none
-  template_slide: 1
-
-links:
-  set_manual: true
-```
 
 ## Pipeline
 
