@@ -97,10 +97,9 @@ def update_deltas(session, config: dict, inventory=None) -> int:
         # Use inventory: iterate only OLE shapes that have a delt_ match
         for slide, ole_shp in inventory.ole_shapes:
             ole_name = ole_shp.Name
-            delt = inventory.delts.get(ole_name)
+            sld_idx = slide.SlideIndex
+            delt = inventory.delts.get((sld_idx, ole_name))
             if delt is not None:
-                # Find the slide index for this slide
-                sld_idx = slide.SlideIndex
                 if sld_idx <= 1:
                     continue  # skip template slide
                 items.append(
@@ -152,7 +151,7 @@ def update_deltas(session, config: dict, inventory=None) -> int:
 
         # Primary: read from existing ntbl_/htmp_/trns_ table
         if inventory is not None:
-            tbl_entry = inventory.tables.get(item.ole_name)
+            tbl_entry = inventory.tables.get((item.slide_index, item.ole_name))
             tbl_shape = tbl_entry[0] if tbl_entry is not None else None
         else:
             tbl_shape, _ = find_table_shape(slide, item.ole_name)

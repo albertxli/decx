@@ -191,3 +191,15 @@ print(constants.ppUpdateOptionAutomatic) # 2
 **Fix:** Reverted to per-cell `cell_range.Cells(row, col).Text` which returns the exact formatted display string from Excel. The 0.5s performance cost is worth preserving correct number formatting.
 
 **Rule:** Always use `.Text` for reading cell values destined for display. `.Value2` is only safe for numeric calculations where formatting doesn't matter.
+
+---
+
+## 17. Inventory Must Be Keyed Per-Slide — Same OLE Names on Different Slides
+
+**Problem:** Inventory dicts (`tables`, `delts`) were keyed by OLE name alone (`str`). When multiple slides have OLE objects with the same name (e.g., `Object_23n` on slides 6-27), only the first slide's match was stored. All subsequent slides with the same OLE name silently skipped table updates.
+
+**Why it happens:** The template uses consistent naming — the same OLE name appears on many slides, each linked to a different Excel range. This is by design.
+
+**Fix:** Key inventory dicts by `(slide_index, ole_name)` tuple. Match table/delt shapes to OLE objects only on the same slide. This matches VBA behavior where `FindExistingNtblTable` takes the slide as a parameter.
+
+**Rule:** Never use bare OLE names as dict keys in the inventory. Always include the slide index to handle duplicate names across slides.

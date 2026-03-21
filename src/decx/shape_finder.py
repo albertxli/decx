@@ -86,7 +86,7 @@ def _scan_shape_recursive(
         # Check the group shape itself for delt_ prefix BEFORE recursing.
         # delt_ shapes are often groups (arrows with multiple sub-shapes).
         if "delt_" in name:
-            all_delt_shapes.append((shape, name))
+            all_delt_shapes.append((slide, shape, name))
             inventory.count_delt += 1
         # Recurse into group items for OLE objects, charts, etc.
         for sub_shp in shape.GroupItems:
@@ -123,7 +123,7 @@ def _scan_shape_recursive(
         # ntbl_/htmp_/trns_ candidates
         for prefix in ("ntbl_", "htmp_", "trns_"):
             if prefix in name:
-                all_table_shapes.append((shape, prefix.rstrip("_"), name))
+                all_table_shapes.append((slide, shape, prefix.rstrip("_"), name))
                 if prefix == "ntbl_":
                     inventory.count_ntbl += 1
                 elif prefix == "htmp_":
@@ -134,7 +134,7 @@ def _scan_shape_recursive(
 
     # delt_ candidates (non-group shapes with delt_ in name)
     if "delt_" in name:
-        all_delt_shapes.append((shape, name))
+        all_delt_shapes.append((slide, shape, name))
         inventory.count_delt += 1
 
 
@@ -154,38 +154,43 @@ def build_presentation_inventory(presentation) -> SlideInventory:
                 shp, slide, inventory, all_table_shapes, all_delt_shapes
             )
 
-    # Now index tables and delts by OLE name.
-    # For each OLE shape, find matching table/delt shapes.
-    for _slide, ole_shp in inventory.ole_shapes:
+    # Index tables and delts by (slide_index, ole_name) for per-slide lookups.
+    # Same OLE names can appear on different slides — each must match independently.
+    for ole_slide, ole_shp in inventory.ole_shapes:
         ole_name = ole_shp.Name
+        sld_idx = ole_slide.SlideIndex
+        key = (sld_idx, ole_name)
 
-        # Tables: search priority ntbl -> htmp -> trns
-        if ole_name not in inventory.tables:
-            for tbl_shape, tbl_type, tbl_name in all_table_shapes:
-                if tbl_type == "ntbl" and "ntbl_" in tbl_name:
-                    if is_exact_token_match(tbl_name, ole_name):
-                        inventory.tables[ole_name] = (tbl_shape, tbl_type)
-                        break
+        # Tables: search priority ntbl -> htmp -> trns (same slide only)
+        if key not in inventory.tables:
+            for tbl_slide, tbl_shape, tbl_type, tbl_name in all_table_shapes:
+                if tbl_slide.SlideIndex != sld_idx:
+                    continue
+                if tbl_type == "ntbl" and is_exact_token_match(tbl_name, ole_name):
+                    inventory.tables[key] = (tbl_shape, tbl_type)
+                    break
             else:
-                # Try htmp
-                for tbl_shape, tbl_type, tbl_name in all_table_shapes:
-                    if tbl_type == "htmp" and "htmp_" in tbl_name:
-                        if is_exact_token_match(tbl_name, ole_name):
-                            inventory.tables[ole_name] = (tbl_shape, tbl_type)
-                            break
+                for tbl_slide, tbl_shape, tbl_type, tbl_name in all_table_shapes:
+                    if tbl_slide.SlideIndex != sld_idx:
+                        continue
+                    if tbl_type == "htmp" and is_exact_token_match(tbl_name, ole_name):
+                        inventory.tables[key] = (tbl_shape, tbl_type)
+                        break
                 else:
-                    # Try trns
-                    for tbl_shape, tbl_type, tbl_name in all_table_shapes:
-                        if tbl_type == "trns" and "trns_" in tbl_name:
-                            if is_exact_token_match(tbl_name, ole_name):
-                                inventory.tables[ole_name] = (tbl_shape, tbl_type)
-                                break
+                    for tbl_slide, tbl_shape, tbl_type, tbl_name in all_table_shapes:
+                        if tbl_slide.SlideIndex != sld_idx:
+                            continue
+                        if tbl_type == "trns" and is_exact_token_match(tbl_name, ole_name):
+                            inventory.tables[key] = (tbl_shape, tbl_type)
+                            break
 
-        # Delts
-        if ole_name not in inventory.delts:
-            for delt_shape, delt_name in all_delt_shapes:
+        # Delts (same slide only)
+        if key not in inventory.delts:
+            for delt_slide, delt_shape, delt_name in all_delt_shapes:
+                if delt_slide.SlideIndex != sld_idx:
+                    continue
                 if is_exact_token_match(delt_name, ole_name):
-                    inventory.delts[ole_name] = delt_shape
+                    inventory.delts[key] = delt_shape
                     break
 
     return inventory

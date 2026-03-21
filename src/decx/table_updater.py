@@ -68,7 +68,8 @@ def _process_linked_shape(
 
     # Find existing special table shape (O(1) with inventory, O(n) without)
     if inventory is not None:
-        tbl_entry = inventory.tables.get(ole_name)
+        sld_key = (slide.SlideIndex, ole_name)
+        tbl_entry = inventory.tables.get(sld_key)
         if tbl_entry is not None:
             existing_table, table_type = tbl_entry
         else:
@@ -79,7 +80,7 @@ def _process_linked_shape(
     if existing_table is None:
         # If delt-only OLE (no table but has delt_ shape), skip
         if inventory is not None:
-            has_delt = ole_name in inventory.delts
+            has_delt = sld_key in inventory.delts
         else:
             has_delt = find_delt_shape(slide, ole_name) is not None
         if has_delt:
