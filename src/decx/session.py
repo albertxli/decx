@@ -19,15 +19,19 @@ XL_CALCULATION_AUTOMATIC = -4105
 _SECURITY_DIALOG_TITLE = "Microsoft PowerPoint Security Notice"
 
 
-def _auto_dismiss_security_dialog(timeout: float = 15.0):
+def _auto_dismiss_security_dialog(stop_event, timeout: float = 15.0):
     """Background thread: find and close the 'Update Links' security dialog.
 
     PowerPoint shows a blocking 'Security Notice' dialog when opening files
     with OLE links via COM. Neither AutomationSecurity nor DisplayAlerts
     suppress it. This thread polls for the dialog and sends WM_CLOSE.
+
+    Exits early if stop_event is set (presentation opened successfully).
     """
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
+        if stop_event.is_set():
+            return
         time.sleep(0.3)
         found = []
 
@@ -82,8 +86,10 @@ class Session:
         # that blocks Presentations.Open on files with OLE links.
         # Skip for read-only sessions — no link dialog in read-only mode.
         if not self.read_only:
+            self._dismisser_stop = threading.Event()
             dismisser = threading.Thread(
                 target=_auto_dismiss_security_dialog,
+                args=(self._dismisser_stop,),
                 daemon=True,
             )
             dismisser.start()
@@ -91,6 +97,10 @@ class Session:
         self.presentation = self.ppt_app.Presentations.Open(
             self.pptx_path, ReadOnly=self.read_only, Untitled=False, WithWindow=False
         )
+
+        # Signal dismisser to stop — presentation opened successfully
+        if hasattr(self, "_dismisser_stop"):
+            self._dismisser_stop.set()
         log.info(
             "Opened presentation: %s (%d slides)",
             self.pptx_path,
