@@ -9,3 +9,4 @@ build/
 CLAUDE.md
 test_files/
 RUN ALL_Table+Chart_v11.bas
+example_runfile.py

@@ -171,6 +171,8 @@ decx info FILE                  Inspect a .pptx file (read-only, no Excel needed
 decx config                     Show all available --set keys and defaults
 
 decx steps                      Show all pipeline steps for use with --only
+
+decx run RUNFILE [-v]           Execute a Python runfile for batch processing
 ```
 
 ## Configuration
@@ -202,6 +204,83 @@ decx update report.pptx -e data.xlsx --set ccst.positive_prefix="" --set links.s
 | `delta.template_none` | `tmpl_delta_none` | No-change delta template shape name |
 | `delta.template_slide` | `1` | Slide number where delta templates live |
 | `links.set_manual` | `true` | Set OLE links to manual update mode |
+
+## Runfiles
+
+For batch processing multiple presentations (e.g. different regions or data sets), define all jobs in a Python runfile and execute with `decx run`:
+
+```bash
+decx run batch.py
+decx run batch.py -v    # verbose
+```
+
+A runfile is a plain `.py` file with module-level variables. All paths resolve relative to the runfile's directory.
+
+### Single template
+
+```python
+# batch.py
+
+jobs = {
+    "templates/report_template.pptx": {
+        "group_a": "data/dataset_a.xlsx",
+        "group_b": "data/dataset_b.xlsx",
+        "group_c": "data/dataset_c.xlsx",
+    },
+}
+
+default_output = "output/"
+# -> output/group_a.pptx, output/group_b.pptx, output/group_c.pptx
+```
+
+### Multiple templates
+
+```python
+# batch.py
+
+jobs = {
+    "templates/report_type1.pptx": {
+        "group_a": "data/dataset_a.xlsx",
+        "group_b": "data/dataset_b.xlsx",
+    },
+    "templates/report_type2.pptx": {
+        "group_c": "data/dataset_c.xlsx",
+        "group_d": "data/dataset_d.xlsx",
+    },
+}
+
+default_output = "output/report_2025_{name}.pptx"
+# -> output/report_2025_group_a.pptx, output/report_2025_group_c.pptx, ...
+
+steps = ["links", "tables", "deltas", "coloring", "charts"]
+
+config = {
+    "ccst.positive_prefix": "",
+}
+```
+
+### Per-job output override
+
+Job values can be a string (excel path) or a dict with `data` + `output`:
+
+```python
+jobs = {
+    "templates/report_template.pptx": {
+        "group_a": "data/dataset_a.xlsx",                           # -> uses default_output
+        "group_b": {"data": "data/dataset_b.xlsx",                  # -> custom output path
+                    "output": "special/group_b_final.pptx"},
+    },
+}
+```
+
+### Runfile variables
+
+| Variable | Required | Type | Default |
+|---|---|---|---|
+| `jobs` | Yes | `dict[template, dict[name, excel_path \| dict]]` | — |
+| `default_output` | No | Directory ending in `/` or format string with `{name}` ending in `.pptx` | `"output/{name}.pptx"` |
+| `steps` | No | `list[str]` — valid: `links`, `tables`, `deltas`, `coloring`, `charts` | all 5 steps |
+| `config` | No | `dict[str, str]` — same keys as `--set` (see `decx config`) | defaults |
 
 ## Pipeline
 

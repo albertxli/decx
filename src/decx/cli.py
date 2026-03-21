@@ -558,6 +558,67 @@ def cmd_steps():
     console.print("\nUsage: decx update report.pptx --only tables --only deltas")
 
 
+def cmd_run(args: argparse.Namespace):
+    """Handle the 'run' subcommand — execute a Python runfile."""
+    from decx.runfile import load_runfile
+
+    # Logging
+    if args.verbose:
+        logging.basicConfig(
+            level=logging.DEBUG,
+            format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+            datefmt="%H:%M:%S",
+        )
+    else:
+        logging.basicConfig(level=logging.CRITICAL)
+
+    # Load and validate runfile
+    try:
+        spec = load_runfile(args.runfile)
+    except (ValueError, FileNotFoundError) as e:
+        console.print(f"[red]Error:[/red] {e}")
+        sys.exit(1)
+
+    # Build config
+    try:
+        overrides = (
+            [f"{k}={v}" for k, v in spec.config.items()] if spec.config else None
+        )
+        config = get_config(overrides)
+    except ValueError as e:
+        console.print(f"[red]Config error:[/red] {e}")
+        sys.exit(1)
+
+    # Copy templates to output paths and build pairs
+    pairs = []
+    for job in spec.jobs:
+        if not os.path.exists(job.template):
+            console.print(f"[red]Error:[/red] Template not found: {job.template}")
+            sys.exit(1)
+        if not os.path.exists(job.excel):
+            console.print(f"[red]Error:[/red] Excel file not found: {job.excel}")
+            sys.exit(1)
+
+        # Create output directory and copy template
+        os.makedirs(os.path.dirname(job.output) or ".", exist_ok=True)
+        shutil.copy2(job.template, job.output)
+        pairs.append((job.output, job.excel))
+
+    # Build synthetic options namespace
+    opts = argparse.Namespace(
+        only=spec.steps,
+        skip_links=False,
+        skip_deltas=False,
+        skip_coloring=False,
+        skip_charts=False,
+        verbose=args.verbose,
+        output=None,  # already handled via job.output
+    )
+
+    console.print(f"\nRunfile: {os.path.basename(args.runfile)} ({len(pairs)} job(s))")
+    _run_pairs(pairs, config, opts)
+
+
 def cmd_config():
     """Handle the 'config' subcommand — show all available --set keys."""
     t = Table(show_header=True)
@@ -680,6 +741,21 @@ def main():
     # --- steps subcommand ---
     subparsers.add_parser("steps", help="Show all pipeline steps for use with --only")
 
+    # --- run subcommand ---
+    run_parser = subparsers.add_parser(
+        "run",
+        help="Execute a Python runfile for batch processing",
+        epilog=("Examples:\n  decx run rpm_2024.py\n  decx run rpm_2024.py -v\n"),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    run_parser.add_argument(
+        "runfile",
+        help="Path to a Python runfile defining jobs, steps, and config.",
+    )
+    run_parser.add_argument(
+        "--verbose", "-v", action="store_true", help="Enable debug logging"
+    )
+
     args = parser.parse_args()
 
     if args.command == "update":
@@ -690,6 +766,8 @@ def main():
         cmd_config()
     elif args.command == "steps":
         cmd_steps()
+    elif args.command == "run":
+        cmd_run(args)
     else:
         parser.print_help()
         sys.exit(0)
