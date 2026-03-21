@@ -172,6 +172,8 @@ decx update [FILES] [OPTIONS]   Run the update pipeline
 decx info FILE                  Inspect a .pptx file (read-only, no Excel needed)
 
 decx init                       Write default config.yaml to current directory
+
+decx config                     Show all available --set keys and defaults
 ```
 
 ## Configuration
