@@ -19,6 +19,7 @@ classifiers = [
 dependencies = [
     "pywin32>=311; sys_platform == 'win32'",
     "pyyaml>=6.0.3",
+    "rich>=13.0",
 ]
 
 [project.scripts]

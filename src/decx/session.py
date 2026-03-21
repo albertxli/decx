@@ -60,9 +60,10 @@ class Session:
             ...
     """
 
-    def __init__(self, pptx_path: str, excel_path: str | None = None):
+    def __init__(self, pptx_path: str, excel_path: str | None = None, *, read_only: bool = False):
         self.pptx_path = pptx_path
         self.excel_path = excel_path
+        self.read_only = read_only
         self.ppt_app = None
         self.excel_app = None
         self.presentation = None
@@ -84,7 +85,7 @@ class Session:
         dismisser.start()
 
         self.presentation = self.ppt_app.Presentations.Open(
-            self.pptx_path, ReadOnly=False, Untitled=False, WithWindow=False
+            self.pptx_path, ReadOnly=self.read_only, Untitled=False, WithWindow=False
         )
         log.info(
             "Opened presentation: %s (%d slides)",
@@ -92,8 +93,8 @@ class Session:
             self.presentation.Slides.Count,
         )
 
-        # Excel (if path provided)
-        if self.excel_path:
+        # Excel (if path provided and not read-only mode)
+        if self.excel_path and not self.read_only:
             self._init_excel()
             self.workbook = self.get_or_open_workbook(self.excel_path)
 

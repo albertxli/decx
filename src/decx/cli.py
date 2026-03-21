@@ -4,16 +4,25 @@ import argparse
 import glob
 import logging
 import os
+import shutil
 import sys
 import time
+from collections import Counter
 
 import yaml
+from rich.console import Console
+from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
+from rich.table import Table
 
 from decx import __version__
 from decx.config import load_config, DEFAULT_CONFIG
 from decx.session import Session
 from decx import linker, table_updater, delta_updater, color_coder, chart_updater
-from decx.shape_finder import build_presentation_inventory
+from decx.shape_finder import build_presentation_inventory, find_template_shape
+
+console = Console()
+
+MSO_LINKED_OLE_OBJECT = 10
 
 
 def resolve_paths(patterns: list[str]) -> list[str]:
@@ -60,6 +69,50 @@ def parse_pair(pair_str: str) -> tuple[str, str]:
         print(f"Invalid pair format: '{pair_str}'")
         sys.exit(1)
     return os.path.abspath(pptx), os.path.abspath(excel)
+
+
+def resolve_output_path(
+    pptx_path: str, output: str | None, is_batch: bool, pair_count: int
+) -> str:
+    """Determine the actual pptx path to process, copying if output specified.
+
+    Returns the path to process (may be a copy of the original).
+    """
+    if output is None:
+        return pptx_path
+
+    # Check if output is a specific .pptx file
+    if output.lower().endswith(".pptx"):
+        if is_batch and pair_count > 1:
+            console.print(
+                "[red]Error:[/red] Cannot use -o with a specific .pptx filename "
+                "in batch mode with multiple pairs. Use a directory instead."
+            )
+            sys.exit(1)
+        out_path = os.path.abspath(output)
+        os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+        shutil.copy2(pptx_path, out_path)
+        return out_path
+
+    # Otherwise treat as directory
+    out_dir = os.path.abspath(output)
+    os.makedirs(out_dir, exist_ok=True)
+    out_path = os.path.join(out_dir, os.path.basename(pptx_path))
+    shutil.copy2(pptx_path, out_path)
+    return out_path
+
+
+def _make_summary_table(results: dict, column_label: str = "Count") -> Table:
+    """Build a rich Table for step results."""
+    table = Table(show_header=True)
+    table.add_column("Step")
+    table.add_column(column_label, justify="right")
+    table.add_row("Links", str(results["links"]))
+    table.add_row("Tables", str(results["tables"]))
+    table.add_row("Deltas", str(results["deltas"]))
+    table.add_row("Color coding", str(results["colors"]))
+    table.add_row("Charts", str(results["charts"]))
+    return table
 
 
 def process_presentation(
@@ -112,45 +165,53 @@ def _run_pairs(pairs: list[tuple[str, str]], config: dict, args: argparse.Namesp
     grand_total = {"links": 0, "tables": 0, "deltas": 0, "colors": 0, "charts": 0}
     t_start = time.perf_counter()
     processed = 0
+    total_files = len(pairs)
+    output = getattr(args, "output", None)
 
-    for pptx_path, excel_path in pairs:
+    for idx, (pptx_path, excel_path) in enumerate(pairs, 1):
         if not os.path.exists(pptx_path):
-            print(f"PPT not found, skipping: {pptx_path}")
+            console.print(f"[yellow]PPT not found, skipping:[/yellow] {pptx_path}")
             continue
         if not os.path.exists(excel_path):
-            print(f"Excel not found, skipping: {excel_path}")
+            console.print(f"[yellow]Excel not found, skipping:[/yellow] {excel_path}")
             continue
 
-        print(
-            f"Processing: {os.path.basename(pptx_path)} <- {os.path.basename(excel_path)}"
+        # Resolve output path (may copy file)
+        actual_path = resolve_output_path(
+            pptx_path, output, is_batch=len(pairs) > 1, pair_count=len(pairs)
         )
+
         t_file = time.perf_counter()
 
-        results = process_presentation(pptx_path, excel_path, config, args)
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            TimeElapsedColumn(),
+            console=console,
+        ) as progress:
+            progress.add_task(
+                f"Processing file {idx}/{total_files}: "
+                f"{os.path.basename(pptx_path)}",
+                total=None,
+            )
+            results = process_presentation(actual_path, excel_path, config, args)
 
         elapsed = time.perf_counter() - t_file
-        print(
-            f"  Done in {elapsed:.2f}s — "
-            f"{results['links']} links, "
-            f"{results['tables']} tables, "
-            f"{results['deltas']} deltas, "
-            f"{results['colors']} colored, "
-            f"{results['charts']} charts"
-        )
+
+        # Per-file summary
+        pptx_name = os.path.basename(pptx_path)
+        excel_name = os.path.basename(excel_path)
+        console.print(f"\n{pptx_name} \u2190 {excel_name} ({elapsed:.2f}s)")
+        console.print(_make_summary_table(results))
 
         for key in grand_total:
             grand_total[key] += results[key]
         processed += 1
 
+    # Grand total
     total_elapsed = time.perf_counter() - t_start
-    print(
-        f"\nAll done! {processed} file(s) in {total_elapsed:.2f}s\n"
-        f"  {grand_total['links']} link(s) updated\n"
-        f"  {grand_total['tables']} table(s) refreshed\n"
-        f"  {grand_total['deltas']} delta(s) updated\n"
-        f"  {grand_total['colors']} table(s) color-coded\n"
-        f"  {grand_total['charts']} chart(s) updated"
-    )
+    console.print(f"\nAll done! {processed} file(s) in {total_elapsed:.2f}s")
+    console.print(_make_summary_table(grand_total, column_label="Total"))
 
 
 def cmd_update(args: argparse.Namespace):
@@ -201,8 +262,149 @@ def cmd_update(args: argparse.Namespace):
 
 
 def cmd_info(args: argparse.Namespace):
-    """Handle the 'info' subcommand — placeholder."""
-    print("Coming soon")
+    """Handle the 'info' subcommand — inspect a PPTX file."""
+    pptx_path = os.path.abspath(args.presentation)
+    if not os.path.exists(pptx_path):
+        console.print(f"[red]File not found:[/red] {pptx_path}")
+        sys.exit(1)
+
+    with Session(pptx_path, excel_path=None, read_only=True) as session:
+        pres = session.presentation
+        slide_count = pres.Slides.Count
+
+        # Build inventory
+        inventory = build_presentation_inventory(pres)
+
+        # Count unlinked charts by scanning all shapes
+        unlinked_charts = _count_all_unlinked_charts(pres)
+
+        # Collect OLE source file paths
+        ole_sources: Counter = Counter()
+        for _slide, shp in inventory.ole_shapes:
+            try:
+                source_full = shp.LinkFormat.SourceFullName
+                # Split on first '!' to get file path
+                file_path = source_full.split("!")[0]
+                ole_sources[file_path] += 1
+            except Exception:
+                ole_sources["(unknown)"] += 1
+
+        # Find template shapes on slide 1
+        config = DEFAULT_CONFIG
+        template_names = [
+            config["delta"]["template_positive"],
+            config["delta"]["template_negative"],
+            config["delta"]["template_none"],
+        ]
+        template_found = {}
+        for name in template_names:
+            shp = find_template_shape(pres, name, slide_index=1)
+            template_found[name] = shp is not None
+
+        # Count special shapes
+        ntbl_count = sum(1 for _, (_, t) in inventory.tables.items() if t == "ntbl")
+        htmp_count = sum(1 for _, (_, t) in inventory.tables.items() if t == "htmp")
+        trns_count = sum(1 for _, (_, t) in inventory.tables.items() if t == "trns")
+        delt_count = len(inventory.delts)
+        ccst_count = len(inventory.ccst_tables)
+
+    # --- Print results ---
+    # Presentation table
+    console.print("\nPresentation")
+    t = Table(show_header=False)
+    t.add_column("Key")
+    t.add_column("Value")
+    t.add_row("File", os.path.basename(pptx_path))
+    t.add_row("Slides", str(slide_count))
+    console.print(t)
+
+    # OLE Links table
+    console.print("\nOLE Links")
+    t = Table(show_header=True)
+    t.add_column("Source File")
+    t.add_column("Count", justify="right")
+    total_ole = 0
+    for src, count in ole_sources.most_common():
+        t.add_row(src, str(count))
+        total_ole += count
+    t.add_row("Total", str(total_ole), style="bold")
+    console.print(t)
+
+    # Charts table
+    linked_count = len(inventory.charts)
+    console.print("\nCharts")
+    t = Table(show_header=True)
+    t.add_column("Type")
+    t.add_column("Count", justify="right")
+    t.add_row("Linked", str(linked_count))
+    t.add_row("Unlinked", str(unlinked_charts))
+    console.print(t)
+
+    # Special Shapes table
+    console.print("\nSpecial Shapes")
+    t = Table(show_header=True)
+    t.add_column("Type")
+    t.add_column("Count", justify="right")
+    t.add_row("ntbl_ (normal tables)", str(ntbl_count))
+    t.add_row("htmp_ (heatmap tables)", str(htmp_count))
+    t.add_row("trns_ (transposed tables)", str(trns_count))
+    t.add_row("delt_ (delta indicators)", str(delt_count))
+    t.add_row("_ccst (color-coded)", str(ccst_count))
+    console.print(t)
+
+    # Delta Templates table
+    console.print("\nDelta Templates (Slide 1)")
+    t = Table(show_header=True)
+    t.add_column("Shape Name")
+    t.add_column("Found", justify="center")
+    for name in template_names:
+        found = "\u2713" if template_found[name] else "\u2717"
+        t.add_row(name, found)
+    console.print(t)
+
+
+def _count_unlinked_charts_recursive(shape, results=None):
+    """Recursively count charts that are NOT linked."""
+    if results is None:
+        results = [0]
+    from decx.shape_finder import MSO_GROUP
+    if shape.Type == MSO_GROUP:
+        for sub_shp in shape.GroupItems:
+            _count_unlinked_charts_recursive(sub_shp, results)
+    elif shape.HasChart:
+        try:
+            if not shape.Chart.ChartData.IsLinked:
+                results[0] += 1
+        except Exception:
+            pass
+    return results[0]
+
+
+def _count_all_unlinked_charts(presentation) -> int:
+    """Count all unlinked charts across the presentation."""
+    from decx.shape_finder import MSO_GROUP
+    count = 0
+    for slide in presentation.Slides:
+        for shp in slide.Shapes:
+            count += _count_unlinked_in_shape(shp)
+    return count
+
+
+def _count_unlinked_in_shape(shape) -> int:
+    """Count unlinked charts in a shape (recursive for groups)."""
+    from decx.shape_finder import MSO_GROUP
+    if shape.Type == MSO_GROUP:
+        total = 0
+        for sub_shp in shape.GroupItems:
+            total += _count_unlinked_in_shape(sub_shp)
+        return total
+    if shape.HasChart:
+        try:
+            if not shape.Chart.ChartData.IsLinked:
+                return 1
+        except Exception:
+            pass
+    return 0
 
 
 def cmd_init(args: argparse.Namespace):
@@ -234,6 +436,8 @@ def main():
         epilog=(
             "Examples:\n"
             "  decx update report.pptx --excel data.xlsx\n"
+            "  decx update report.pptx --excel data.xlsx -o output/\n"
+            "  decx update report.pptx --excel data.xlsx -o result.pptx\n"
             "  decx update report.pptx                        (file picker opens)\n"
             '  decx update --pair "us.pptx:us.xlsx" --pair "mx.pptx:mx.xlsx"\n'
         ),
@@ -259,6 +463,15 @@ def main():
         help="A pptx:xlsx pair. Can be repeated for batch processing multiple pairs.",
     )
     update_parser.add_argument(
+        "--output",
+        "-o",
+        default=None,
+        help=(
+            "Output path. If ends with .pptx, write to that file (single-file only). "
+            "If a directory, write output files there. If omitted, modify in-place."
+        ),
+    )
+    update_parser.add_argument(
         "--config",
         "-c",
         default=None,
@@ -281,7 +494,13 @@ def main():
     )
 
     # --- info subcommand ---
-    subparsers.add_parser("info", help="Show project information (coming soon)")
+    info_parser = subparsers.add_parser(
+        "info", help="Inspect a PPTX file and show shape/link inventory"
+    )
+    info_parser.add_argument(
+        "presentation",
+        help="Path to the .pptx file to inspect",
+    )
 
     # --- init subcommand ---
     subparsers.add_parser("init", help="Write default config.yaml to current directory")
