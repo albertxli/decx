@@ -23,6 +23,62 @@ console = Console()
 
 MSO_LINKED_OLE_OBJECT = 10
 
+VALID_STEPS = {"links", "tables", "deltas", "coloring", "charts"}
+STEPS_REQUIRING_EXCEL = {"links", "charts"}
+STEPS_WITH_LINK_REFRESH = {"links", "charts"}
+
+# Ordered metadata for display: (name, needs_excel, link_refresh, description)
+STEP_INFO = [
+    ("links", True, True, "Re-point OLE links to new Excel file"),
+    ("tables", False, False, "Populate PPT tables from current OLE links"),
+    ("deltas", False, False, "Swap delta indicator arrows"),
+    ("coloring", False, False, "Apply _ccst color coding"),
+    ("charts", True, True, "Update chart data source links"),
+]
+
+
+def resolve_steps(
+    only: list[str] | None,
+    skip_links: bool,
+    skip_deltas: bool,
+    skip_coloring: bool,
+    skip_charts: bool,
+) -> set[str]:
+    """Determine which pipeline steps to run.
+
+    Returns a set of step names from VALID_STEPS.
+    Raises SystemExit if --only and --skip-* are both used, or if an unknown step is given.
+    """
+    has_skip = skip_links or skip_deltas or skip_coloring or skip_charts
+
+    if only and has_skip:
+        console.print(
+            "[red]Error:[/red] --only and --skip-* flags are mutually exclusive."
+        )
+        sys.exit(1)
+
+    if only:
+        invalid = set(only) - VALID_STEPS
+        if invalid:
+            console.print(
+                f"[red]Error:[/red] Unknown step(s): {', '.join(sorted(invalid))}. "
+                f"Valid steps: {', '.join(sorted(VALID_STEPS))}"
+            )
+            sys.exit(1)
+        return set(only)
+
+    # Default: all steps minus skipped ones
+    steps = set(VALID_STEPS)
+    if skip_links:
+        steps.discard("links")
+    if skip_deltas:
+        steps.discard("deltas")
+    if skip_coloring:
+        steps.discard("coloring")
+    if skip_charts:
+        steps.discard("charts")
+    return steps
+
 
 def resolve_paths(patterns: list[str]) -> list[str]:
     """Resolve glob patterns to absolute file paths."""
@@ -151,30 +207,39 @@ def process_presentation(
         decx_logger.setLevel(logging.WARNING)
         decx_logger.propagate = False
 
+    steps = resolve_steps(
+        getattr(options, "only", None),
+        getattr(options, "skip_links", False),
+        getattr(options, "skip_deltas", False),
+        getattr(options, "skip_coloring", False),
+        getattr(options, "skip_charts", False),
+    )
+
     try:
         with Session(pptx_path, excel_path) as session:
             inventory = build_presentation_inventory(session.presentation)
 
-            if not options.skip_links:
+            if "links" in steps:
                 results["links"] = linker.update_links(
                     session, excel_path, config, inventory=inventory
                 )
 
-            results["tables"] = table_updater.update_tables(
-                session, config, inventory=inventory
-            )
+            if "tables" in steps:
+                results["tables"] = table_updater.update_tables(
+                    session, config, inventory=inventory
+                )
 
-            if not options.skip_deltas:
+            if "deltas" in steps:
                 results["deltas"] = delta_updater.update_deltas(
                     session, config, inventory=inventory
                 )
 
-            if not options.skip_coloring:
+            if "coloring" in steps:
                 results["colors"] = color_coder.apply_color_coding(
                     session, config, inventory=inventory
                 )
 
-            if not options.skip_charts:
+            if "charts" in steps:
                 results["charts"] = chart_updater.update_charts(
                     session, excel_path, inventory=inventory
                 )
@@ -292,19 +357,29 @@ def cmd_update(args: argparse.Namespace):
         print("Error: Provide presentation file(s) or use --pair for batch pairs.")
         sys.exit(1)
 
+    # Determine which steps will run (for --excel requirement check)
+    steps = resolve_steps(
+        args.only,
+        args.skip_links,
+        args.skip_deltas,
+        args.skip_coloring,
+        args.skip_charts,
+    )
+    needs_excel = bool(steps & STEPS_REQUIRING_EXCEL)
+
     excel_path = args.excel
-    if not excel_path:
+    if not excel_path and needs_excel:
         from decx.file_picker import pick_excel_file
 
         excel_path = pick_excel_file()
         if not excel_path:
             print("No Excel file selected. Exiting.")
             sys.exit(1)
-    excel_path = os.path.abspath(excel_path)
-
-    if not os.path.exists(excel_path):
-        print(f"Excel file not found: {excel_path}")
-        sys.exit(1)
+    if excel_path:
+        excel_path = os.path.abspath(excel_path)
+        if not os.path.exists(excel_path):
+            print(f"Excel file not found: {excel_path}")
+            sys.exit(1)
 
     pptx_files = resolve_paths(args.presentations)
     if not pptx_files:
@@ -462,6 +537,27 @@ def _count_unlinked_in_shape(shape) -> int:
     return 0
 
 
+def cmd_steps():
+    """Handle the 'steps' subcommand — show all pipeline steps for --only."""
+    t = Table(show_header=True)
+    t.add_column("Step")
+    t.add_column("Needs --excel", justify="right")
+    t.add_column("Link Refresh", justify="right")
+    t.add_column("Description")
+
+    for name, needs_excel, link_refresh, description in STEP_INFO:
+        t.add_row(
+            name,
+            "Yes" if needs_excel else "No",
+            "Yes" if link_refresh else "No",
+            description,
+        )
+
+    console.print("\nPipeline Steps (use with --only STEP)")
+    console.print(t)
+    console.print("\nUsage: decx update report.pptx --only tables --only deltas")
+
+
 def cmd_config():
     """Handle the 'config' subcommand — show all available --set keys."""
     t = Table(show_header=True)
@@ -531,6 +627,17 @@ def main():
         ),
     )
     update_parser.add_argument(
+        "--only",
+        action="append",
+        default=None,
+        metavar="STEP",
+        help=(
+            "Run only the specified step(s). Repeatable. "
+            "Valid steps: links, tables, deltas, coloring, charts. "
+            "Mutually exclusive with --skip-* flags."
+        ),
+    )
+    update_parser.add_argument(
         "--skip-links", action="store_true", help="Skip Step 1a (re-link OLE)"
     )
     update_parser.add_argument(
@@ -570,6 +677,9 @@ def main():
         "config", help="Show all available --set keys and their defaults"
     )
 
+    # --- steps subcommand ---
+    subparsers.add_parser("steps", help="Show all pipeline steps for use with --only")
+
     args = parser.parse_args()
 
     if args.command == "update":
@@ -578,6 +688,8 @@ def main():
         cmd_info(args)
     elif args.command == "config":
         cmd_config()
+    elif args.command == "steps":
+        cmd_steps()
     else:
         parser.print_help()
         sys.exit(0)

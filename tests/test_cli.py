@@ -5,7 +5,7 @@ import tempfile
 
 import pytest
 
-from decx.cli import parse_pair, resolve_output_path
+from decx.cli import parse_pair, resolve_output_path, resolve_steps, VALID_STEPS
 from decx.config import apply_overrides, DEFAULT_CONFIG
 
 
@@ -79,6 +79,53 @@ class TestResolveOutputPath:
             result = resolve_output_path(src, out_dir, True, 3)
             expected = os.path.join(os.path.abspath(out_dir), "source.pptx")
             assert result == expected
+
+
+class TestResolveSteps:
+    def test_only_links(self):
+        assert resolve_steps(["links"], False, False, False, False) == {"links"}
+
+    def test_only_tables(self):
+        assert resolve_steps(["tables"], False, False, False, False) == {"tables"}
+
+    def test_only_deltas(self):
+        assert resolve_steps(["deltas"], False, False, False, False) == {"deltas"}
+
+    def test_only_coloring(self):
+        assert resolve_steps(["coloring"], False, False, False, False) == {"coloring"}
+
+    def test_only_charts(self):
+        assert resolve_steps(["charts"], False, False, False, False) == {"charts"}
+
+    def test_only_multiple(self):
+        assert resolve_steps(["links", "tables"], False, False, False, False) == {
+            "links",
+            "tables",
+        }
+
+    def test_no_only_returns_all(self):
+        assert resolve_steps(None, False, False, False, False) == VALID_STEPS
+
+    def test_only_and_skip_mutually_exclusive(self):
+        with pytest.raises(SystemExit):
+            resolve_steps(["links"], True, False, False, False)
+
+    def test_only_and_skip_deltas_mutually_exclusive(self):
+        with pytest.raises(SystemExit):
+            resolve_steps(["tables"], False, True, False, False)
+
+    def test_only_invalid_step(self):
+        with pytest.raises(SystemExit):
+            resolve_steps(["bogus"], False, False, False, False)
+
+    def test_skip_links(self):
+        steps = resolve_steps(None, True, False, False, False)
+        assert "links" not in steps
+        assert "tables" in steps
+
+    def test_skip_multiple(self):
+        steps = resolve_steps(None, True, True, True, True)
+        assert steps == {"tables"}
 
 
 class TestApplyOverrides:

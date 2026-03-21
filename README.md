@@ -43,6 +43,10 @@ decx update --pair "us.pptx:us_data.xlsx" --pair "mx.pptx:mx_data.xlsx"
 # Batch mode with output directory
 decx update --pair "us.pptx:us.xlsx" --pair "mx.pptx:mx.xlsx" -o output/
 
+# Run only specific steps
+decx update report.pptx --only tables --only deltas
+decx update report.pptx --excel data.xlsx --only links --only tables
+
 # Skip specific steps
 decx update report.pptx --excel data.xlsx --skip-links --skip-charts
 
@@ -153,6 +157,8 @@ decx update [FILES] [OPTIONS]   Run the update pipeline
   -e, --excel PATH              Excel data file (or file picker opens)
   -p, --pair PPT:XLSX           Explicit pptx:xlsx pair (repeatable)
   -o, --output PATH             Output file (.pptx) or directory
+  --only STEP                   Run only specified step(s) (repeatable)
+                                Valid: links, tables, deltas, coloring, charts
   --skip-links                  Skip OLE re-linking
   --skip-deltas                 Skip delta indicator updates
   --skip-coloring               Skip _ccst color coding
@@ -163,6 +169,8 @@ decx update [FILES] [OPTIONS]   Run the update pipeline
 decx info FILE                  Inspect a .pptx file (read-only, no Excel needed)
 
 decx config                     Show all available --set keys and defaults
+
+decx steps                      Show all pipeline steps for use with --only
 ```
 
 ## Configuration
