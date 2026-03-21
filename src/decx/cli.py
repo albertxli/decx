@@ -143,10 +143,13 @@ def process_presentation(
     collector.setFormatter(logging.Formatter("%(message)s"))
     decx_logger = logging.getLogger("decx")
     decx_logger.addHandler(collector)
-    decx_logger.setLevel(logging.WARNING)
-    # Stop errors from propagating to root logger (prevents stderr leak during spinner)
+    old_level = decx_logger.level
     old_propagate = decx_logger.propagate
-    if not getattr(options, "verbose", False):
+    verbose = getattr(options, "verbose", False)
+    if verbose:
+        decx_logger.setLevel(logging.DEBUG)
+    else:
+        decx_logger.setLevel(logging.WARNING)
         decx_logger.propagate = False
 
     try:
@@ -181,6 +184,7 @@ def process_presentation(
     finally:
         decx_logger.removeHandler(collector)
         decx_logger.propagate = old_propagate
+        decx_logger.setLevel(old_level)
 
     return results, collector.errors
 
