@@ -108,10 +108,10 @@ def _make_summary_table(results: dict, column_label: str = "Count") -> Table:
     table.add_column("Step")
     table.add_column(column_label, justify="right")
     table.add_row("Links", str(results["links"]))
+    table.add_row("Charts", str(results["charts"]))
     table.add_row("Tables", str(results["tables"]))
     table.add_row("Deltas", str(results["deltas"]))
     table.add_row("Color coding", str(results["colors"]))
-    table.add_row("Charts", str(results["charts"]))
     return table
 
 
@@ -211,7 +211,7 @@ def _run_pairs(pairs: list[tuple[str, str]], config: dict, args: argparse.Namesp
 
     # Grand total
     total_elapsed = time.perf_counter() - t_start
-    console.print(f"\nAll done! {processed} file(s) in {total_elapsed:.2f}s")
+    console.print(f"\nTotal Summary | {processed} file(s) in {total_elapsed:.2f}s")
     console.print(_make_summary_table(grand_total, column_label="Total"))
 
 
