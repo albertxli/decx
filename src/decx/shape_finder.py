@@ -109,7 +109,7 @@ def _scan_shape_recursive(
     if shape.HasChart:
         try:
             if shape.Chart.ChartData.IsLinked:
-                inventory.charts.append(shape)
+                inventory.charts.append((slide, shape))
         except Exception:
             pass
 
@@ -275,18 +275,18 @@ def collect_linked_ole_shapes(presentation) -> list:
     return results
 
 
-def _collect_charts_recursive(shape, results):
+def _collect_charts_recursive(shape, slide, results):
     """Recursively collect linked chart shapes, including inside groups.
 
     Deprecated: use build_presentation_inventory() instead.
     """
     if shape.Type == MSO_GROUP:
         for sub_shp in shape.GroupItems:
-            _collect_charts_recursive(sub_shp, results)
+            _collect_charts_recursive(sub_shp, slide, results)
     elif shape.HasChart:
         try:
             if shape.Chart.ChartData.IsLinked:
-                results.append(shape)
+                results.append((slide, shape))
         except Exception:
             pass
 
@@ -294,12 +294,12 @@ def _collect_charts_recursive(shape, results):
 def collect_linked_charts(presentation) -> list:
     """Collect all linked chart shapes across all slides.
 
-    Returns list of shapes. Recurses into groups.
+    Returns list of (slide, shape) tuples. Recurses into groups.
 
     Deprecated: use build_presentation_inventory() instead.
     """
     results = []
     for slide in presentation.Slides:
         for shp in slide.Shapes:
-            _collect_charts_recursive(shp, results)
+            _collect_charts_recursive(shp, slide, results)
     return results

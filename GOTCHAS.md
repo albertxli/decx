@@ -203,3 +203,70 @@ print(constants.ppUpdateOptionAutomatic) # 2
 **Fix:** Key inventory dicts by `(slide_index, ole_name)` tuple. Match table/delt shapes to OLE objects only on the same slide. This matches VBA behavior where `FindExistingNtblTable` takes the slide as a parameter.
 
 **Rule:** Never use bare OLE names as dict keys in the inventory. Always include the slide index to handle duplicate names across slides.
+
+---
+
+## 18. Series.Formula Is Inaccessible on Linked Charts
+
+**Problem:** `Chart.SeriesCollection(i).Formula` throws a COM error (`OLE error 0xe0000002`) on linked charts in PowerPoint. This property works fine on embedded/unlinked charts and in Excel, but fails on charts linked to an external workbook.
+
+**What does NOT work:**
+- `Series.Formula` — COM error
+- `Series.FormulaR1C1` — same error
+- `ChartData.Activate()` then reading `Series.Formula` — opens a **visible Excel window** per chart (~4s each), often hangs or crashes the RPC server. Completely unusable for 100+ charts.
+- `ChartData.Workbook` — requires `Activate()` first (same problem)
+
+**What DOES work:**
+- `Series.Values` — returns tuple of floats (the cached plotted values), no activation needed
+- `Series.XValues` — returns tuple of category labels
+- `Series.Name` — returns the series name
+- Parsing the PPTX as a zip file and reading the chart XML directly
+
+**Workaround:** Open the `.pptx` as a zip archive. Chart data references are stored in `ppt/charts/chartN.xml` inside `<c:numRef><c:f>` elements (e.g. `Tables!$B$9:$B$13`). No COM needed for this step — pure XML parsing.
+
+**Rule:** Never use `ChartData.Activate()` for reading chart data. Parse the PPTX zip for range references, and use `Series.Values` via COM for the actual plotted values.
+
+See: `decx/checker.py` — `_build_chart_ref_map()`, `_read_chart_range()`
+
+---
+
+## 19. Chart-to-XML Mapping Must Use Slide+Position, Not Flat Index
+
+**Problem:** `inventory.charts` (COM) and `ppt/charts/chartN.xml` files are NOT in the same order. Chart XML files are numbered sequentially (`chart1.xml` through `chart100.xml`), but COM chart shapes have arbitrary names like `Chart 7`, `Chart 33`. Matching by flat index produces completely wrong range references — every chart compares against the wrong Excel data.
+
+**Why it happens:** Charts are created, deleted, and re-added during template editing. The XML numbering reflects creation order, not slide order. COM iterates shapes in slide presentation order.
+
+**What works:** Map via the slide XML relationship chain:
+1. Parse each `ppt/slides/slideN.xml` — find `<p:graphicFrame>` elements containing `<c:chart r:id="rIdX"/>` in document order
+2. Look up `rIdX` in `ppt/slides/_rels/slideN.xml.rels` → get target like `../charts/chart5.xml`
+3. Parse that chart XML for `<c:numRef><c:f>` range references
+4. Key by `(slide_number, chart_position_on_slide)` — this matches COM iteration order
+
+**Rule:** Never match charts by flat index or XML filename number. Always use the slide relationship chain to build a `(slide, position)` keyed map.
+
+See: `decx/checker.py` — `_build_chart_ref_map()`
+
+---
+
+## 20. Chart Series Can Reference Non-Contiguous Excel Ranges
+
+**Problem:** Some chart series pull data from non-adjacent cells. The range reference in the chart XML looks like `(Tables!$C$810,Tables!$F$810)` — two separate cells joined by a comma, wrapped in parentheses. Excel COM's `Range()` method rejects comma-separated ranges and throws an exception.
+
+**Why it happens:** Charts built from non-adjacent columns (e.g. comparing two different time periods that aren't in consecutive columns) store the multi-area reference as a comma-delimited string.
+
+**What does NOT work:**
+- `wb.Sheets("Tables").Range("C810,F810")` — COM exception
+
+**What works:** Split the reference on commas, read each sub-range separately, and concatenate the values:
+```python
+sub_refs = ref.split(",")  # ["Tables!$C$810", "Tables!$F$810"]
+for sub_ref in sub_refs:
+    cell_range = wb.Sheets(sheet).Range(addr)
+    values.extend(...)
+```
+
+Also strip outer parentheses if present: `(Tables!$C$810,Tables!$F$810)` → `Tables!$C$810,Tables!$F$810`.
+
+**Rule:** Always handle comma-separated multi-area ranges when reading chart data references. Split, read each part, concatenate.
+
+See: `decx/checker.py` — `_read_chart_range()`

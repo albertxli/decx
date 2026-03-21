@@ -30,7 +30,7 @@ def update_charts(session, excel_path: str, inventory=None) -> int:
         return 0
 
     updated = 0
-    for chart_shape in charts:
+    for _slide, chart_shape in charts:
         try:
             chart_shape.LinkFormat.SourceFullName = excel_path
             chart_shape.LinkFormat.Update()

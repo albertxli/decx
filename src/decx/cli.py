@@ -621,7 +621,7 @@ def cmd_run(args: argparse.Namespace):
 
 def cmd_check(args: argparse.Namespace):
     """Handle the 'check' subcommand — validate PPT values against Excel."""
-    from decx.checker import check_tables, check_deltas
+    from decx.checker import check_tables, check_deltas, check_charts
 
     # Logging
     if args.verbose:
@@ -658,10 +658,13 @@ def cmd_check(args: argparse.Namespace):
         delt_checked, delt_mismatches = check_deltas(
             session, config, inventory, excel_override=excel_path
         )
+        num_charts, chart_series_checked, chart_mismatches = check_charts(
+            session, config, inventory, excel_override=excel_path
+        )
 
     # Print results
-    all_mismatches = tbl_mismatches + delt_mismatches
-    total_checked = tbl_checked + delt_checked
+    all_mismatches = tbl_mismatches + delt_mismatches + chart_mismatches
+    total_checked = tbl_checked + delt_checked + chart_series_checked
 
     # Summary table
     t = Table(show_header=True)
@@ -672,8 +675,11 @@ def cmd_check(args: argparse.Namespace):
 
     tbl_status = "[red]FAIL[/red]" if tbl_mismatches else "[green]PASS[/green]"
     delt_status = "[red]FAIL[/red]" if delt_mismatches else "[green]PASS[/green]"
+    chart_status = "[red]FAIL[/red]" if chart_mismatches else "[green]PASS[/green]"
+    chart_label = f"{num_charts} ({chart_series_checked} series)"
     t.add_row("Tables", str(tbl_checked), str(len(tbl_mismatches)), tbl_status)
     t.add_row("Deltas", str(delt_checked), str(len(delt_mismatches)), delt_status)
+    t.add_row("Charts", chart_label, str(len(chart_mismatches)), chart_status)
     console.print(t)
 
     # Mismatch details table

@@ -79,12 +79,14 @@ class Session:
         self.ppt_app.DisplayAlerts = 0  # ppAlertsNone
 
         # Start background thread to auto-dismiss the security dialog
-        # that blocks Presentations.Open on files with OLE links
-        dismisser = threading.Thread(
-            target=_auto_dismiss_security_dialog,
-            daemon=True,
-        )
-        dismisser.start()
+        # that blocks Presentations.Open on files with OLE links.
+        # Skip for read-only sessions — no link dialog in read-only mode.
+        if not self.read_only:
+            dismisser = threading.Thread(
+                target=_auto_dismiss_security_dialog,
+                daemon=True,
+            )
+            dismisser.start()
 
         self.presentation = self.ppt_app.Presentations.Open(
             self.pptx_path, ReadOnly=self.read_only, Untitled=False, WithWindow=False

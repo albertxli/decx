@@ -1,6 +1,11 @@
 """Unit tests for decx.checker — no COM required."""
 
-from decx.checker import _compare_cell_text, _extract_sign_suffix, Mismatch
+from decx.checker import (
+    _compare_cell_text,
+    _extract_sign_suffix,
+    _values_match,
+    Mismatch,
+)
 from decx.delta_updater import _determine_sign, _strip_sign_suffix
 
 
@@ -108,6 +113,32 @@ class TestMismatch:
         )
         assert m.category == "delta"
         assert "neg" in m.detail
+
+
+class TestValuesMatch:
+    def test_identical(self):
+        assert _values_match((1.0, 2.0, 3.0), (1.0, 2.0, 3.0)) is True
+
+    def test_mismatch(self):
+        assert _values_match((1.0, 2.0, 3.0), (1.0, 2.0, 4.0)) is False
+
+    def test_within_tolerance(self):
+        assert _values_match((1.0,), (1.0 + 1e-12,)) is True
+
+    def test_outside_tolerance(self):
+        assert _values_match((1.0,), (1.001,)) is False
+
+    def test_different_lengths(self):
+        assert _values_match((1.0, 2.0), (1.0,)) is False
+
+    def test_empty_tuples(self):
+        assert _values_match((), ()) is True
+
+    def test_string_values_match(self):
+        assert _values_match(("a", "b"), ("a", "b")) is True
+
+    def test_string_values_mismatch(self):
+        assert _values_match(("a", "b"), ("a", "c")) is False
 
 
 class TestTransposedIndexSwap:

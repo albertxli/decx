@@ -2,6 +2,8 @@
 
 import logging
 import re
+import xml.etree.ElementTree as ET
+import zipfile
 from dataclasses import dataclass
 
 from decx.delta_updater import _determine_sign, SIGN_SUFFIXES
@@ -247,3 +249,258 @@ def check_deltas(session, config, inventory, excel_override=None):
             )
 
     return checked, mismatches
+
+
+def _values_match(before: tuple, after: tuple, tol: float = 1e-9) -> bool:
+    """Compare two tuples of numeric values with float tolerance."""
+    if len(before) != len(after):
+        return False
+    for a, b in zip(before, after):
+        try:
+            if abs(float(a) - float(b)) > tol:
+                return False
+        except (TypeError, ValueError):
+            if a != b:
+                return False
+    return True
+
+
+def _build_chart_ref_map(pptx_path: str) -> dict[tuple[int, int], list[str]]:
+    """Parse PPTX zip to build a map of (slide_num, chart_position) -> [range_refs].
+
+    Uses the slide XML → slide rels → chart XML chain to correctly map
+    each chart's position on each slide to its series range references.
+    """
+    ns_p = "http://schemas.openxmlformats.org/presentationml/2006/main"
+    ns_c = "http://schemas.openxmlformats.org/drawingml/2006/chart"
+    ns_r = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+
+    result = {}
+
+    try:
+        with zipfile.ZipFile(pptx_path, "r") as z:
+            slide_files = sorted(
+                [f for f in z.namelist() if re.match(r"ppt/slides/slide\d+\.xml$", f)],
+                key=lambda f: int(re.search(r"slide(\d+)", f).group(1)),
+            )
+
+            for sf in slide_files:
+                slide_num = int(re.search(r"slide(\d+)", sf).group(1))
+
+                # Parse slide rels to map rId -> chart file
+                rels_path = f"ppt/slides/_rels/slide{slide_num}.xml.rels"
+                try:
+                    rels_root = ET.fromstring(z.read(rels_path))
+                    rid_map = {r.get("Id"): r.get("Target") for r in rels_root}
+                except Exception:
+                    continue
+
+                # Find chart graphicFrames in document order
+                slide_root = ET.fromstring(z.read(sf))
+                chart_pos = 0
+
+                for gf in slide_root.iter(f"{{{ns_p}}}graphicFrame"):
+                    chart_elem = gf.find(f".//{{{ns_c}}}chart")
+                    if chart_elem is None:
+                        continue
+
+                    rid = chart_elem.get(f"{{{ns_r}}}id")
+                    target = rid_map.get(rid)
+                    if not target:
+                        chart_pos += 1
+                        continue
+
+                    # Resolve relative path: ../charts/chart5.xml -> ppt/charts/chart5.xml
+                    chart_path = target.replace("../", "ppt/")
+
+                    # Parse the chart XML for numRef ranges
+                    try:
+                        chart_root = ET.fromstring(z.read(chart_path))
+                        refs = []
+                        for num_ref in chart_root.iter(f"{{{ns_c}}}numRef"):
+                            f_elem = num_ref.find(f"{{{ns_c}}}f")
+                            if f_elem is not None and f_elem.text:
+                                refs.append(f_elem.text)
+                        result[(slide_num, chart_pos)] = refs
+                    except Exception:
+                        pass
+
+                    chart_pos += 1
+
+    except Exception as e:
+        log.warning("Cannot parse chart XML from %s: %s", pptx_path, e)
+
+    return result
+
+
+def _read_chart_range(wb, range_ref: str) -> list:
+    """Read values from a chart range reference, handling multi-area ranges.
+
+    Supports both simple ranges ('Tables!$B$9:$B$13') and non-contiguous
+    ranges ('(Tables!$C$810,Tables!$F$810)').
+    """
+    # Strip outer parentheses if present: (Tables!$C$810,Tables!$F$810)
+    ref = range_ref.strip()
+    if ref.startswith("(") and ref.endswith(")"):
+        ref = ref[1:-1]
+
+    # Split on comma to handle multi-area ranges
+    # But be careful: "Tables!$L$810:$O$810,Tables!$W$810:$Y$810"
+    # Each part has its own sheet!range
+    sub_refs = [s.strip() for s in ref.split(",")]
+
+    values = []
+    for sub_ref in sub_refs:
+        clean = sub_ref.replace("$", "")
+        if "!" in clean:
+            sheet_name, range_addr = clean.split("!", 1)
+        else:
+            sheet_name, range_addr = "Sheet1", clean
+
+        cell_range = wb.Sheets(sheet_name).Range(range_addr)
+        for r in range(1, cell_range.Rows.Count + 1):
+            for c in range(1, cell_range.Columns.Count + 1):
+                try:
+                    v = cell_range.Cells(r, c).Value2
+                    values.append(v)
+                except Exception:
+                    values.append(None)
+
+    return values
+
+
+def check_charts(session, config, inventory, excel_override=None):
+    """Check linked chart data against Excel source.
+
+    Reads Series.Values from the chart (via COM) and compares against
+    the actual Excel range values (parsed from the chart XML inside the PPTX zip).
+    Charts are matched by (slide_number, position_within_slide).
+
+    Returns (chart_count, series_checked, mismatches).
+    """
+    series_checked = 0
+    mismatches = []
+
+    if not inventory.charts:
+        return 0, series_checked, mismatches
+
+    # Build chart ref map keyed by (slide_num, position_on_slide)
+    pptx_path = session.pptx_path
+    chart_ref_map = _build_chart_ref_map(pptx_path)
+
+    # Group COM charts by slide, preserving order
+    from collections import defaultdict
+
+    charts_by_slide = defaultdict(list)
+    for slide, shp in inventory.charts:
+        charts_by_slide[slide.SlideIndex].append(shp)
+
+    chart_count = 0
+    for slide_idx in sorted(charts_by_slide.keys()):
+        for pos, shp in enumerate(charts_by_slide[slide_idx]):
+            chart_count += 1
+            chart_name = shp.Name
+            try:
+                chart = shp.Chart
+                sc = chart.SeriesCollection()
+                series_count = sc.Count
+            except Exception as e:
+                log.warning("Chart %s: cannot read series: %s", chart_name, e)
+                continue
+
+            # Get the Excel file path for this chart
+            try:
+                excel_file = shp.LinkFormat.SourceFullName
+            except Exception:
+                excel_file = None
+
+            if excel_override:
+                excel_file = excel_override
+
+            # Get range refs from XML using (slide_num, position)
+            series_refs = chart_ref_map.get((slide_idx, pos), [])
+
+            for i in range(1, series_count + 1):
+                try:
+                    s = sc.Item(i)
+                    series_name = s.Name
+                    ppt_values = tuple(s.Values)
+                except Exception as e:
+                    log.warning(
+                        "Chart %s, Series %d: cannot read values: %s",
+                        chart_name,
+                        i,
+                        e,
+                    )
+                    continue
+
+                ref_idx = i - 1
+                if ref_idx < len(series_refs) and excel_file:
+                    range_ref = series_refs[ref_idx]
+
+                    try:
+                        wb = session.get_or_open_workbook(excel_file)
+                        excel_values = _read_chart_range(wb, range_ref)
+
+                        series_checked += 1
+
+                        if not _values_match(tuple(ppt_values), tuple(excel_values)):
+                            changes = []
+                            for idx, (pv, ev) in enumerate(
+                                zip(ppt_values, excel_values)
+                            ):
+                                try:
+                                    if (
+                                        ev is not None
+                                        and abs(float(pv) - float(ev)) > 1e-9
+                                    ):
+                                        changes.append(
+                                            f"[{idx + 1}]: PPT={pv:.6g} Excel={ev:.6g}"
+                                        )
+                                except (TypeError, ValueError):
+                                    if pv != ev:
+                                        changes.append(
+                                            f"[{idx + 1}]: PPT={pv!r} Excel={ev!r}"
+                                        )
+                            detail = (
+                                f"Series '{series_name}': "
+                                f"{', '.join(changes[:3])}"
+                                f"{' ...' if len(changes) > 3 else ''}"
+                                f" [{range_ref}]"
+                            )
+                            mismatches.append(
+                                Mismatch(
+                                    slide=slide_idx,
+                                    shape_name=chart_name,
+                                    detail=detail,
+                                    category="chart",
+                                )
+                            )
+                        else:
+                            log.debug(
+                                "Slide %d, Chart %s, Series '%s': OK (%d values) [%s]",
+                                slide_idx,
+                                chart_name,
+                                series_name,
+                                len(ppt_values),
+                                range_ref,
+                            )
+                    except Exception as e:
+                        log.warning(
+                            "Chart %s, Series '%s': cannot read Excel range %s: %s",
+                            chart_name,
+                            series_name,
+                            range_ref,
+                            e,
+                        )
+                else:
+                    series_checked += 1
+                    log.debug(
+                        "Slide %d, Chart %s, Series '%s': %d values (no range ref)",
+                        slide_idx,
+                        chart_name,
+                        series_name,
+                        len(ppt_values),
+                    )
+
+    return chart_count, series_checked, mismatches

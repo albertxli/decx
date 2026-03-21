@@ -292,6 +292,38 @@ jobs = {
 4. **Color coding** — apply color rules to `_ccst` tables
 5. **Update charts** — refresh linked chart data sources
 
+## Validation
+
+After running the pipeline, use `decx check` to verify that PPT values match the Excel source data:
+
+```bash
+decx check report.pptx                    # check against current OLE links
+decx check report.pptx --excel data.xlsx   # check against specific Excel file
+decx check report.pptx -v                  # verbose — show every cell checked
+```
+
+`decx check` validates three categories:
+
+| Check | What it does |
+|---|---|
+| **Tables** | Compares every PPT table cell against the linked Excel range, cell by cell. Handles normal (`ntbl_`), heatmap (`htmp_`), and transposed (`trns_`) tables. |
+| **Deltas** | Reads the `_pos`/`_neg`/`_none` suffix on delta shapes and verifies it matches the sign of the Excel value. |
+| **Charts** | Reads `Series.Values` from each linked chart and compares against the Excel range (parsed from the PPTX chart XML). Handles non-contiguous ranges. |
+
+Output includes a summary table with PASS/FAIL per category, and a mismatch details table with exact cell references for quick lookup:
+
+```
+┏━━━━━━━━┳━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━┓
+┃ Check  ┃        Checked ┃ Mismatches ┃ Status ┃
+┡━━━━━━━━╇━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━┩
+│ Tables │            147 │          0 │  PASS  │
+│ Deltas │              6 │          0 │  PASS  │
+│ Charts │ 100 (214 series)│          0 │  PASS  │
+└────────┴────────────────┴────────────┴────────┘
+```
+
+Exit code is `0` if all checks pass, `1` if any mismatches — useful for scripts and CI.
+
 ## Benchmark
 
 Reference benchmarks on a 30-slide presentation with 86 OLE objects and 100 charts. Actual speed varies by machine, file size, and disk speed.
