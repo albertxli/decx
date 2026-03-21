@@ -478,6 +478,21 @@ def cmd_init(args: argparse.Namespace):
     print(f"Wrote default config to {output_path}")
 
 
+def cmd_config():
+    """Handle the 'config' subcommand — show all available --set keys."""
+    t = Table(show_header=True)
+    t.add_column("Key")
+    t.add_column("Default")
+
+    for section, values in DEFAULT_CONFIG.items():
+        for key, default in values.items():
+            t.add_row(f"{section}.{key}", str(default))
+
+    console.print("\nAvailable --set keys")
+    console.print(t)
+    console.print("\nUsage: decx update report.pptx -e data.xlsx --set KEY=VALUE")
+
+
 def main():
     parser = argparse.ArgumentParser(
         prog="decx",
@@ -575,6 +590,11 @@ def main():
     # --- init subcommand ---
     subparsers.add_parser("init", help="Write default config.yaml to current directory")
 
+    # --- config subcommand ---
+    subparsers.add_parser(
+        "config", help="Show all available --set keys and their defaults"
+    )
+
     args = parser.parse_args()
 
     if args.command == "update":
@@ -583,6 +603,8 @@ def main():
         cmd_info(args)
     elif args.command == "init":
         cmd_init(args)
+    elif args.command == "config":
+        cmd_config()
     else:
         parser.print_help()
         sys.exit(0)
