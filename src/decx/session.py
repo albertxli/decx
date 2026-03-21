@@ -86,8 +86,11 @@ class Session:
         self.presentation = self.ppt_app.Presentations.Open(
             self.pptx_path, ReadOnly=False, Untitled=False, WithWindow=False
         )
-        log.info("Opened presentation: %s (%d slides)",
-                 self.pptx_path, self.presentation.Slides.Count)
+        log.info(
+            "Opened presentation: %s (%d slides)",
+            self.pptx_path,
+            self.presentation.Slides.Count,
+        )
 
         # Excel (if path provided)
         if self.excel_path:
@@ -123,9 +126,7 @@ class Session:
 
         self._init_excel()
         # UpdateLinks=0 prevents Excel from auto-refreshing links on open
-        wb = self.excel_app.Workbooks.Open(
-            file_path, UpdateLinks=0, ReadOnly=False
-        )
+        wb = self.excel_app.Workbooks.Open(file_path, UpdateLinks=0, ReadOnly=False)
         self._workbook_cache[file_path] = wb
         log.info("Opened workbook: %s", file_path)
         return wb

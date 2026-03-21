@@ -18,6 +18,7 @@ log = logging.getLogger(__name__)
 @dataclass
 class DeltaItem:
     """Collected data for a single delta indicator to process."""
+
     slide_index: int
     ole_source_full: str
     ole_name: str
@@ -62,19 +63,24 @@ def update_deltas(session, config: dict, inventory=None) -> int:
 
     # Locate template shapes
     tmpl_pos = find_template_shape(
-        session.presentation, delta_cfg.get("template_positive", "tmpl_delta_pos"), tmpl_slide
+        session.presentation,
+        delta_cfg.get("template_positive", "tmpl_delta_pos"),
+        tmpl_slide,
     )
     tmpl_neg = find_template_shape(
-        session.presentation, delta_cfg.get("template_negative", "tmpl_delta_neg"), tmpl_slide
+        session.presentation,
+        delta_cfg.get("template_negative", "tmpl_delta_neg"),
+        tmpl_slide,
     )
     tmpl_none = find_template_shape(
-        session.presentation, delta_cfg.get("template_none", "tmpl_delta_none"), tmpl_slide
+        session.presentation,
+        delta_cfg.get("template_none", "tmpl_delta_none"),
+        tmpl_slide,
     )
 
     if not all([tmpl_pos, tmpl_neg, tmpl_none]):
         log.error(
-            "Missing template shapes on slide %d. "
-            "Expected: %s, %s, %s",
+            "Missing template shapes on slide %d. Expected: %s, %s, %s",
             tmpl_slide,
             delta_cfg.get("template_positive"),
             delta_cfg.get("template_negative"),
@@ -97,16 +103,18 @@ def update_deltas(session, config: dict, inventory=None) -> int:
                 sld_idx = slide.SlideIndex
                 if sld_idx <= 1:
                     continue  # skip template slide
-                items.append(DeltaItem(
-                    slide_index=sld_idx,
-                    ole_source_full=ole_shp.LinkFormat.SourceFullName,
-                    ole_name=ole_name,
-                    delt_name=delt.Name,
-                    delt_left=delt.Left,
-                    delt_top=delt.Top,
-                    delt_width=delt.Width,
-                    delt_height=delt.Height,
-                ))
+                items.append(
+                    DeltaItem(
+                        slide_index=sld_idx,
+                        ole_source_full=ole_shp.LinkFormat.SourceFullName,
+                        ole_name=ole_name,
+                        delt_name=delt.Name,
+                        delt_left=delt.Left,
+                        delt_top=delt.Top,
+                        delt_width=delt.Width,
+                        delt_height=delt.Height,
+                    )
+                )
     else:
         # Fallback: scan slides (backward compatibility)
         for sld_idx in range(2, pres.Slides.Count + 1):  # skip template slide
@@ -122,16 +130,18 @@ def update_deltas(session, config: dict, inventory=None) -> int:
 
                 delt = find_delt_shape(slide, shp.Name)
                 if delt is not None:
-                    items.append(DeltaItem(
-                        slide_index=sld_idx,
-                        ole_source_full=shp.LinkFormat.SourceFullName,
-                        ole_name=shp.Name,
-                        delt_name=delt.Name,
-                        delt_left=delt.Left,
-                        delt_top=delt.Top,
-                        delt_width=delt.Width,
-                        delt_height=delt.Height,
-                    ))
+                    items.append(
+                        DeltaItem(
+                            slide_index=sld_idx,
+                            ole_source_full=shp.LinkFormat.SourceFullName,
+                            ole_name=shp.Name,
+                            delt_name=delt.Name,
+                            delt_left=delt.Left,
+                            delt_top=delt.Top,
+                            delt_width=delt.Width,
+                            delt_height=delt.Height,
+                        )
+                    )
 
     # === PASS 2: Process ===
     count = 0
@@ -149,7 +159,9 @@ def update_deltas(session, config: dict, inventory=None) -> int:
 
         if tbl_shape is not None and tbl_shape.HasTable:
             try:
-                cell_value = tbl_shape.Table.Cell(1, 1).Shape.TextFrame.TextRange.Text.strip()
+                cell_value = tbl_shape.Table.Cell(
+                    1, 1
+                ).Shape.TextFrame.TextRange.Text.strip()
                 if cell_value:
                     got_value = True
             except Exception:
@@ -157,7 +169,9 @@ def update_deltas(session, config: dict, inventory=None) -> int:
 
         # Fallback: read from Excel
         if not got_value:
-            file_path, sheet_name, range_address = extract_link_parts(item.ole_source_full)
+            file_path, sheet_name, range_address = extract_link_parts(
+                item.ole_source_full
+            )
             if range_address == "Not Specified" or not os.path.exists(file_path):
                 continue
 
@@ -167,7 +181,9 @@ def update_deltas(session, config: dict, inventory=None) -> int:
                 if cell_value:
                     got_value = True
             except Exception as e:
-                log.warning("Failed to read Excel for delta '%s': %s", item.delt_name, e)
+                log.warning(
+                    "Failed to read Excel for delta '%s': %s", item.delt_name, e
+                )
 
         if not got_value:
             continue

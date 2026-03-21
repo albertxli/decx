@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 
 # COM constants
 MSO_LINKED_OLE_OBJECT = 10  # msoLinkedOLEObject
-MSO_GROUP = 6               # msoGroup
+MSO_GROUP = 6  # msoGroup
 
 
 def is_exact_token_match(shape_name: str, linked_name: str) -> bool:
@@ -53,6 +53,7 @@ class SlideInventory:
     Built once by build_presentation_inventory(), used by all pipeline steps
     for O(1) lookups instead of repeated slide enumeration.
     """
+
     # All linked OLE Excel.Sheet shapes: list of (slide, shape)
     ole_shapes: list = field(default_factory=list)
     # ole_name -> (shape, table_type) for ntbl_/htmp_/trns_ shapes
@@ -65,13 +66,19 @@ class SlideInventory:
     charts: list = field(default_factory=list)
 
 
-def _scan_shape_recursive(shape, slide, inventory: SlideInventory,
-                          all_table_shapes: list, all_delt_shapes: list):
+def _scan_shape_recursive(
+    shape,
+    slide,
+    inventory: SlideInventory,
+    all_table_shapes: list,
+    all_delt_shapes: list,
+):
     """Recursively scan a shape (and groups) to populate inventory lists."""
     if shape.Type == MSO_GROUP:
         for sub_shp in shape.GroupItems:
-            _scan_shape_recursive(sub_shp, slide, inventory,
-                                  all_table_shapes, all_delt_shapes)
+            _scan_shape_recursive(
+                sub_shp, slide, inventory, all_table_shapes, all_delt_shapes
+            )
         return
 
     # Linked OLE Excel.Sheet
@@ -118,12 +125,13 @@ def build_presentation_inventory(presentation) -> SlideInventory:
     """
     inventory = SlideInventory()
     all_table_shapes: list = []  # (shape, table_type, shape_name)
-    all_delt_shapes: list = []   # (shape, shape_name)
+    all_delt_shapes: list = []  # (shape, shape_name)
 
     for slide in presentation.Slides:
         for shp in slide.Shapes:
-            _scan_shape_recursive(shp, slide, inventory,
-                                  all_table_shapes, all_delt_shapes)
+            _scan_shape_recursive(
+                shp, slide, inventory, all_table_shapes, all_delt_shapes
+            )
 
     # Now index tables and delts by OLE name.
     # For each OLE shape, find matching table/delt shapes.
@@ -163,6 +171,7 @@ def build_presentation_inventory(presentation) -> SlideInventory:
 
 
 # === Backward-compatible functions (deprecated, use inventory instead) ===
+
 
 def find_table_shape(slide, ole_name: str):
     """Find an existing ntbl_/htmp_/trns_ table shape associated with an OLE object.

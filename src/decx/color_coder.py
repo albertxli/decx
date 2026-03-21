@@ -60,7 +60,9 @@ def apply_color_coding(session, config: dict, inventory=None) -> int:
 
         for row_idx in range(1, tbl.Rows.Count + 1):
             for col_idx in range(1, tbl.Columns.Count + 1):
-                cell_text = tbl.Cell(row_idx, col_idx).Shape.TextFrame.TextRange.Text.strip()
+                cell_text = tbl.Cell(
+                    row_idx, col_idx
+                ).Shape.TextFrame.TextRange.Text.strip()
                 test_val = cell_text
                 had_percent = False
 
@@ -79,15 +81,23 @@ def apply_color_coding(session, config: dict, inventory=None) -> int:
                                 cell_text = f"{positive_prefix}{test_val.strip()}%"
                             else:
                                 cell_text = f"{positive_prefix}{test_val.strip()}"
-                            tbl.Cell(row_idx, col_idx).Shape.TextFrame.TextRange.Text = cell_text
+                            tbl.Cell(
+                                row_idx, col_idx
+                            ).Shape.TextFrame.TextRange.Text = cell_text
 
                     # Color by sign
                     if cell_value > 0:
-                        tbl.Cell(row_idx, col_idx).Shape.TextFrame.TextRange.Font.Color.RGB = positive_color
+                        tbl.Cell(
+                            row_idx, col_idx
+                        ).Shape.TextFrame.TextRange.Font.Color.RGB = positive_color
                     elif cell_value < 0:
-                        tbl.Cell(row_idx, col_idx).Shape.TextFrame.TextRange.Font.Color.RGB = negative_color
+                        tbl.Cell(
+                            row_idx, col_idx
+                        ).Shape.TextFrame.TextRange.Font.Color.RGB = negative_color
                     else:
-                        tbl.Cell(row_idx, col_idx).Shape.TextFrame.TextRange.Font.Color.RGB = neutral_color
+                        tbl.Cell(
+                            row_idx, col_idx
+                        ).Shape.TextFrame.TextRange.Font.Color.RGB = neutral_color
 
                     # Symbol removal
                     if symbol_removal:
@@ -97,10 +107,14 @@ def apply_color_coding(session, config: dict, inventory=None) -> int:
                             cell_text = cell_text[1:]
                         if "-" in symbol_removal and cell_text.startswith("-"):
                             cell_text = cell_text[1:]
-                        tbl.Cell(row_idx, col_idx).Shape.TextFrame.TextRange.Text = cell_text
+                        tbl.Cell(
+                            row_idx, col_idx
+                        ).Shape.TextFrame.TextRange.Text = cell_text
                 else:
                     # Non-numeric: neutral color
-                    tbl.Cell(row_idx, col_idx).Shape.TextFrame.TextRange.Font.Color.RGB = neutral_color
+                    tbl.Cell(
+                        row_idx, col_idx
+                    ).Shape.TextFrame.TextRange.Font.Color.RGB = neutral_color
 
     log.info("Color-coded %d _ccst table(s)", total_tables)
     return total_tables

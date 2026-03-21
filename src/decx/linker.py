@@ -49,7 +49,7 @@ def update_links(session, excel_path: str, config: dict, inventory=None) -> int:
                 continue
 
             # Everything after first '!' is 'sheet!range'
-            link_tail = old_link[bang_pos + 1:]
+            link_tail = old_link[bang_pos + 1 :]
             shp.LinkFormat.SourceFullName = f"{excel_path}!{link_tail}"
 
             if set_manual:

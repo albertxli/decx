@@ -1,6 +1,6 @@
 [project]
 name = "decx"
-version = "0.1.0"
+version = "0.1.1"
 description = "Automated PowerPoint report generation from Excel data via COM"
 readme = "README.md"
 license = {text = "MIT"}
@@ -28,7 +28,10 @@ decx = "decx.cli:main"
 Repository = "https://github.com/albertxli/decx"
 
 [dependency-groups]
-dev = ["pytest>=9.0"]
+dev = [
+    "pytest>=9.0",
+    "ruff>=0.15.7",
+]
 
 [tool.pytest.ini_options]
 markers = ["integration: tests that require COM (Windows + PowerPoint + Excel)"]
