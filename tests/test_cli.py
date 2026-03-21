@@ -1,4 +1,4 @@
-"""Unit tests for decx.cli — no COM required."""
+"""Unit tests for decx.cli and decx.config — no COM required."""
 
 import os
 import tempfile
@@ -6,6 +6,7 @@ import tempfile
 import pytest
 
 from decx.cli import parse_pair, resolve_output_path
+from decx.config import apply_overrides, DEFAULT_CONFIG
 
 
 class TestParsePair:
@@ -78,3 +79,58 @@ class TestResolveOutputPath:
             result = resolve_output_path(src, out_dir, True, 3)
             expected = os.path.join(os.path.abspath(out_dir), "source.pptx")
             assert result == expected
+
+
+class TestApplyOverrides:
+    def _base_config(self):
+        import copy
+
+        return copy.deepcopy(DEFAULT_CONFIG)
+
+    def test_string_value(self):
+        config = apply_overrides(self._base_config(), ["ccst.positive_prefix=+"])
+        assert config["ccst"]["positive_prefix"] == "+"
+
+    def test_empty_string(self):
+        config = apply_overrides(self._base_config(), ["ccst.positive_prefix="])
+        assert config["ccst"]["positive_prefix"] == ""
+
+    def test_int_conversion(self):
+        config = apply_overrides(self._base_config(), ["delta.template_slide=2"])
+        assert config["delta"]["template_slide"] == 2
+        assert isinstance(config["delta"]["template_slide"], int)
+
+    def test_bool_true(self):
+        config = apply_overrides(self._base_config(), ["links.set_manual=true"])
+        assert config["links"]["set_manual"] is True
+
+    def test_bool_false(self):
+        config = apply_overrides(self._base_config(), ["links.set_manual=false"])
+        assert config["links"]["set_manual"] is False
+
+    def test_hex_color(self):
+        config = apply_overrides(self._base_config(), ["heatmap.color_minimum=#FF0000"])
+        assert config["heatmap"]["color_minimum"] == "#FF0000"
+
+    def test_multiple_overrides(self):
+        config = apply_overrides(
+            self._base_config(),
+            ["ccst.positive_prefix=", "ccst.symbol_removal=", "delta.template_slide=3"],
+        )
+        assert config["ccst"]["positive_prefix"] == ""
+        assert config["ccst"]["symbol_removal"] == ""
+        assert config["delta"]["template_slide"] == 3
+
+    def test_invalid_key_raises(self):
+        with pytest.raises(ValueError, match="Unknown config key"):
+            apply_overrides(self._base_config(), ["nonexistent.key=value"])
+
+    def test_no_equals_raises(self):
+        with pytest.raises(ValueError, match="Invalid override format"):
+            apply_overrides(self._base_config(), ["no_equals_sign"])
+
+    def test_override_wins_over_default(self):
+        config = self._base_config()
+        assert config["ccst"]["positive_prefix"] == "+"
+        config = apply_overrides(config, ["ccst.positive_prefix=-"])
+        assert config["ccst"]["positive_prefix"] == "-"

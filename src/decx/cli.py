@@ -277,6 +277,14 @@ def cmd_update(args: argparse.Namespace):
 
     # Config
     config = load_config(args.config)
+    if getattr(args, "set", None):
+        from decx.config import apply_overrides
+
+        try:
+            config = apply_overrides(config, args.set)
+        except ValueError as e:
+            console.print(f"[red]Config error:[/red] {e}")
+            sys.exit(1)
 
     # --- Mode 1: --pair for explicit pptx:xlsx pairs ---
     if args.pair:
@@ -543,6 +551,16 @@ def main():
     )
     update_parser.add_argument(
         "--verbose", "-v", action="store_true", help="Enable debug logging"
+    )
+    update_parser.add_argument(
+        "--set",
+        action="append",
+        default=None,
+        metavar="KEY=VALUE",
+        help=(
+            "Override config value using dot notation. Repeatable. "
+            'E.g. --set ccst.positive_prefix="" --set links.set_manual=false'
+        ),
     )
 
     # --- info subcommand ---
