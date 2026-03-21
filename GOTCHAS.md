@@ -179,3 +179,15 @@ print(constants.ppUpdateOptionAutomatic) # 2
 **Impact:** Remote file: 350s+ (frozen) -> 35s. Local file: saves ~3-4s.
 
 **Rule:** Never call `LinkFormat.Update()` — it's the single biggest performance killer for remote files.
+
+---
+
+## 16. Range.Value2 Loses Number Formatting — Use .Text Instead
+
+**Problem:** `Range.Value2` returns raw numeric values (0.05 for "5%", 1234.5 for "1,234.5"). Using it to populate PPT tables destroys all Excel number formatting — percentages show as decimals, formatted numbers lose separators. It can also return `None` for empty ranges, causing tables to silently not update.
+
+**What we tried:** Bulk-read with `Range.Value2` (one COM call) + custom `_format_value()` to convert. This saved ~0.5s per file but broke formatting for all tables.
+
+**Fix:** Reverted to per-cell `cell_range.Cells(row, col).Text` which returns the exact formatted display string from Excel. The 0.5s performance cost is worth preserving correct number formatting.
+
+**Rule:** Always use `.Text` for reading cell values destined for display. `.Value2` is only safe for numeric calculations where formatting doesn't matter.

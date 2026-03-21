@@ -161,52 +161,37 @@ def _process_linked_shape(
     total_rows = tbl.Rows.Count
     total_cols = tbl.Columns.Count
 
-    # Bulk-read all cell values in ONE COM call instead of per-cell .Text reads
-    # Range.Value2 returns a 2D tuple: ((r1c1, r1c2, ...), (r2c1, ...), ...)
-    # For single-cell ranges it returns a scalar, for single-row/col a 1D tuple
-    raw_values = cell_range.Value2
-    if raw_values is None:
-        return True
-
-    # Normalize to 2D list for uniform access
-    if not isinstance(raw_values, tuple):
-        # Single cell
-        values = [[_format_value(raw_values)]]
-    elif not isinstance(raw_values[0], tuple):
-        # Single row
-        values = [[_format_value(v) for v in raw_values]]
-    else:
-        # Normal 2D
-        values = [[_format_value(v) for v in row] for row in raw_values]
-
-    for row_idx in range(max_rows):
-        for col_idx in range(max_cols):
+    for row_idx in range(1, max_rows + 1):
+        for col_idx in range(1, max_cols + 1):
             if do_transpose:
-                ppt_row, ppt_col = col_idx + 1, row_idx + 1
+                ppt_row, ppt_col = col_idx, row_idx
             else:
-                ppt_row, ppt_col = row_idx + 1, col_idx + 1
+                ppt_row, ppt_col = row_idx, col_idx
 
             if ppt_row > total_rows or ppt_col > total_cols:
                 continue
 
             cell_shape = tbl.Cell(ppt_row, ppt_col).Shape
 
-            # Write text from bulk-read values (no per-cell Excel COM call)
-            cell_shape.TextFrame.TextRange.Text = values[row_idx][col_idx]
+            # Use .Text for formatted display string (preserves %, decimals, etc.)
+            # Range.Value2 is faster but loses number formatting — see GOTCHAS #16
+            cell_shape.TextFrame.TextRange.Text = (
+                cell_range.Cells(row_idx, col_idx).Text
+            )
 
             # If not preserving formatting (htmp_ or brand new): pull fill & font from Excel
-            # These still need per-cell COM reads for DisplayFormat colors
             if not skip_formatting and (old_fmt is None or not local_preserve):
                 try:
-                    cell_color = cell_range.Cells(
-                        row_idx + 1, col_idx + 1
-                    ).DisplayFormat.Interior.Color
+                    cell_color = (
+                        cell_range.Cells(row_idx, col_idx)
+                        .DisplayFormat.Interior.Color
+                    )
                     cell_shape.Fill.ForeColor.RGB = cell_color
                 except Exception:
                     pass
 
                 try:
-                    excel_font = cell_range.Cells(row_idx + 1, col_idx + 1).Font
+                    excel_font = cell_range.Cells(row_idx, col_idx).Font
                     ppt_font = cell_shape.TextFrame.TextRange.Font
                     ppt_font.Name = excel_font.Name
                     ppt_font.Size = excel_font.Size
@@ -217,22 +202,6 @@ def _process_linked_shape(
                     pass
 
     return True
-
-
-def _format_value(value) -> str:
-    """Convert a raw Excel Value2 to display string.
-
-    Value2 returns raw values (numbers as floats, dates as serial numbers).
-    We format them as strings matching what .Text would show.
-    """
-    if value is None:
-        return ""
-    if isinstance(value, float):
-        # Remove trailing .0 for integers
-        if value == int(value):
-            return str(int(value))
-        return str(value)
-    return str(value)
 
 
 def update_tables(session, config: dict, inventory=None) -> int:
