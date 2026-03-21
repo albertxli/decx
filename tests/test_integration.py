@@ -55,9 +55,9 @@ class TestFullPipeline:
     def test_process_single_presentation(self):
         """Run full pipeline on template + Argentina data, verify no errors."""
         import yaml
-        from ppt_automation.session import Session
-        from ppt_automation.shape_finder import build_presentation_inventory
-        from ppt_automation import linker, table_updater, delta_updater, color_coder, chart_updater
+        from decx.session import Session
+        from decx.shape_finder import build_presentation_inventory
+        from decx import linker, table_updater, delta_updater, color_coder, chart_updater
 
         config_path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -92,9 +92,9 @@ class TestFullPipeline:
     def test_link_update_changes_source(self):
         """Verify OLE links point to new Excel file after Step 1a."""
         import yaml
-        from ppt_automation.session import Session
-        from ppt_automation.shape_finder import build_presentation_inventory, collect_linked_ole_shapes
-        from ppt_automation import linker
+        from decx.session import Session
+        from decx.shape_finder import build_presentation_inventory, collect_linked_ole_shapes
+        from decx import linker
 
         config_path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -125,9 +125,9 @@ class TestFullPipeline:
     def test_batch_mode_three_countries(self):
         """Process template with all 3 Excel files sequentially."""
         import yaml
-        from ppt_automation.session import Session
-        from ppt_automation.shape_finder import build_presentation_inventory
-        from ppt_automation import linker, table_updater
+        from decx.session import Session
+        from decx.shape_finder import build_presentation_inventory
+        from decx import linker, table_updater
 
         config_path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))),

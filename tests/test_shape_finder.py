@@ -1,6 +1,6 @@
-"""Unit tests for ppt_automation.shape_finder — no COM required."""
+"""Unit tests for decx.shape_finder — no COM required."""
 
-from ppt_automation.shape_finder import is_exact_token_match
+from decx.shape_finder import is_exact_token_match
 
 
 class TestIsExactTokenMatch:

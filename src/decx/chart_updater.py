@@ -2,7 +2,7 @@
 
 import logging
 
-from ppt_automation.shape_finder import collect_linked_charts
+from decx.shape_finder import collect_linked_charts
 
 log = logging.getLogger(__name__)
 
