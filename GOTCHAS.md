@@ -145,3 +145,23 @@ print(constants.ppUpdateOptionAutomatic) # 2
 **Why:** The bulk call appears to do a full presentation-wide refresh including re-rendering all OLE visuals, while per-shape updates are more targeted.
 
 **Rule:** Use per-shape `shp.LinkFormat.Update()` after repointing each link, not bulk `presentation.UpdateLinks()`.
+
+---
+
+## 13. delt_ Shapes Can Be Groups (msoGroup = 6)
+
+**Problem:** Delta indicator arrows (`delt_`) are often group shapes (type=6) containing multiple sub-shapes (arrow + styling). The shape scanning code recursed into groups but returned early, so the group's own name was never checked for `delt_`. This caused `inventory.delts` to miss grouped delt_ shapes, and table_updater would auto-create unwanted `ntbl_` tables for delt_-only OLE objects.
+
+**Fix:** In `_scan_shape_recursive()`, check the group shape's name for `delt_` BEFORE recursing into its children.
+
+**Rule:** Any shape type prefix check (`delt_`, `ntbl_`, etc.) must happen on the shape itself, not just its children. Groups are first-class shapes with names.
+
+---
+
+## 14. Rich Library Unicode Spinner Crashes on cp1252 Terminals
+
+**Problem:** `rich.progress.SpinnerColumn()` uses Braille Unicode characters (`\u280b`, etc.) for the spinner animation. Windows terminals using cp1252 encoding can't render these, causing `UnicodeEncodeError`.
+
+**Fix:** Don't use `SpinnerColumn`. Use plain text progress instead. Also avoid Unicode symbols like `✓` (`\u2713`) and `✗` (`\u2717`) — use "Yes"/"No" instead.
+
+**Rule:** All CLI output must be ASCII-safe for Windows cp1252 terminals. Test with Claude Code's terminal which uses cp1252.

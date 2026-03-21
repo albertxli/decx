@@ -11,7 +11,7 @@ from collections import Counter
 
 import yaml
 from rich.console import Console
-from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
+from rich.progress import Progress, TextColumn, TimeElapsedColumn
 from rich.table import Table
 
 from decx import __version__
@@ -181,27 +181,19 @@ def _run_pairs(pairs: list[tuple[str, str]], config: dict, args: argparse.Namesp
             pptx_path, output, is_batch=len(pairs) > 1, pair_count=len(pairs)
         )
 
+        pptx_name = os.path.basename(pptx_path)
+        excel_name = os.path.basename(excel_path)
+        console.print(
+            f"\n[bold]Processing ({idx}/{total_files}):[/bold] "
+            f"{pptx_name} <- {excel_name}"
+        )
+
         t_file = time.perf_counter()
-
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            TimeElapsedColumn(),
-            console=console,
-        ) as progress:
-            progress.add_task(
-                f"Processing file {idx}/{total_files}: "
-                f"{os.path.basename(pptx_path)}",
-                total=None,
-            )
-            results = process_presentation(actual_path, excel_path, config, args)
-
+        results = process_presentation(actual_path, excel_path, config, args)
         elapsed = time.perf_counter() - t_file
 
         # Per-file summary
-        pptx_name = os.path.basename(pptx_path)
-        excel_name = os.path.basename(excel_path)
-        console.print(f"\n{pptx_name} \u2190 {excel_name} ({elapsed:.2f}s)")
+        console.print(f"  Done in {elapsed:.2f}s")
         console.print(_make_summary_table(results))
 
         for key in grand_total:
@@ -301,12 +293,12 @@ def cmd_info(args: argparse.Namespace):
             shp = find_template_shape(pres, name, slide_index=1)
             template_found[name] = shp is not None
 
-        # Count special shapes
-        ntbl_count = sum(1 for _, (_, t) in inventory.tables.items() if t == "ntbl")
-        htmp_count = sum(1 for _, (_, t) in inventory.tables.items() if t == "htmp")
-        trns_count = sum(1 for _, (_, t) in inventory.tables.items() if t == "trns")
-        delt_count = len(inventory.delts)
-        ccst_count = len(inventory.ccst_tables)
+        # Use raw counts (all shapes with each prefix, not just OLE-matched)
+        ntbl_count = inventory.count_ntbl
+        htmp_count = inventory.count_htmp
+        trns_count = inventory.count_trns
+        delt_count = inventory.count_delt
+        ccst_count = inventory.count_ccst
 
     # --- Print results ---
     # Presentation table
@@ -358,7 +350,7 @@ def cmd_info(args: argparse.Namespace):
     t.add_column("Shape Name")
     t.add_column("Found", justify="center")
     for name in template_names:
-        found = "\u2713" if template_found[name] else "\u2717"
+        found = "Yes" if template_found[name] else "No"
         t.add_row(name, found)
     console.print(t)
 

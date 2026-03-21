@@ -64,6 +64,12 @@ class SlideInventory:
     ccst_tables: list = field(default_factory=list)
     # Linked chart shapes (HasChart + IsLinked)
     charts: list = field(default_factory=list)
+    # Raw counts of ALL special shapes (for decx info, includes unmatched)
+    count_ntbl: int = 0
+    count_htmp: int = 0
+    count_trns: int = 0
+    count_delt: int = 0
+    count_ccst: int = 0
 
 
 def _scan_shape_recursive(
@@ -74,7 +80,15 @@ def _scan_shape_recursive(
     all_delt_shapes: list,
 ):
     """Recursively scan a shape (and groups) to populate inventory lists."""
+    name = shape.Name
+
     if shape.Type == MSO_GROUP:
+        # Check the group shape itself for delt_ prefix BEFORE recursing.
+        # delt_ shapes are often groups (arrows with multiple sub-shapes).
+        if "delt_" in name:
+            all_delt_shapes.append((shape, name))
+            inventory.count_delt += 1
+        # Recurse into group items for OLE objects, charts, etc.
         for sub_shp in shape.GroupItems:
             _scan_shape_recursive(
                 sub_shp, slide, inventory, all_table_shapes, all_delt_shapes
@@ -100,21 +114,28 @@ def _scan_shape_recursive(
             pass
 
     # Table shapes: collect for later OLE-name matching
-    name = shape.Name
     if shape.HasTable:
         # _ccst tables
         if "_ccst" in name:
             inventory.ccst_tables.append(shape)
+            inventory.count_ccst += 1
 
         # ntbl_/htmp_/trns_ candidates
         for prefix in ("ntbl_", "htmp_", "trns_"):
             if prefix in name:
                 all_table_shapes.append((shape, prefix.rstrip("_"), name))
+                if prefix == "ntbl_":
+                    inventory.count_ntbl += 1
+                elif prefix == "htmp_":
+                    inventory.count_htmp += 1
+                elif prefix == "trns_":
+                    inventory.count_trns += 1
                 break  # a shape matches at most one prefix
 
-    # delt_ candidates
+    # delt_ candidates (non-group shapes with delt_ in name)
     if "delt_" in name:
         all_delt_shapes.append((shape, name))
+        inventory.count_delt += 1
 
 
 def build_presentation_inventory(presentation) -> SlideInventory:

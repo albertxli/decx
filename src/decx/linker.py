@@ -61,7 +61,11 @@ def update_links(session, excel_path: str, config: dict, inventory=None) -> int:
             updated += 1
             log.debug("Updated link: %s -> %s", shp.Name, excel_path)
         except Exception as e:
-            log.warning("Failed to update link for shape '%s': %s", shp.Name, e)
+            try:
+                shape_name = shp.Name
+            except Exception:
+                shape_name = "(unknown)"
+            log.warning("Failed to update link for shape '%s': %s", shape_name, e)
 
     log.info("Updated %d OLE link(s)", updated)
     return updated
