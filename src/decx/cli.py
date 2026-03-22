@@ -215,37 +215,76 @@ def process_presentation(
         getattr(options, "skip_charts", False),
     )
 
+    def _run_step(label, fn):
+        """Run a step with spinner (non-verbose) or plain (verbose)."""
+        if verbose:
+            return fn()
+        with console.status(f"  {label}...", spinner="dots"):
+            t = time.perf_counter()
+            count = fn()
+            elapsed_s = time.perf_counter() - t
+        console.print(f"  [green]OK[/green] {label:<12} {count:>4}  ({elapsed_s:.1f}s)")
+        return count
+
     try:
         with Session(pptx_path, excel_path) as session:
             inventory = build_presentation_inventory(session.presentation)
 
+            inv = inventory  # local alias for lambda capture (ruff F821)
+
             if "links" in steps:
-                results["links"] = linker.update_links(
-                    session, excel_path, config, inventory=inventory
+                results["links"] = _run_step(
+                    "Links",
+                    lambda: linker.update_links(
+                        session,
+                        excel_path,
+                        config,
+                        inventory=inv,  # noqa: F821
+                    ),
                 )
 
             if "tables" in steps:
-                results["tables"] = table_updater.update_tables(
-                    session, config, inventory=inventory
+                results["tables"] = _run_step(
+                    "Tables",
+                    lambda: table_updater.update_tables(
+                        session,
+                        config,
+                        inventory=inv,  # noqa: F821
+                    ),
                 )
 
             if "deltas" in steps:
-                results["deltas"] = delta_updater.update_deltas(
-                    session, config, inventory=inventory
+                results["deltas"] = _run_step(
+                    "Deltas",
+                    lambda: delta_updater.update_deltas(
+                        session,
+                        config,
+                        inventory=inv,  # noqa: F821
+                    ),
                 )
 
             if "coloring" in steps:
-                results["colors"] = color_coder.apply_color_coding(
-                    session, config, inventory=inventory
+                results["colors"] = _run_step(
+                    "Coloring",
+                    lambda: color_coder.apply_color_coding(
+                        session,
+                        config,
+                        inventory=inv,  # noqa: F821
+                    ),
                 )
 
             if "charts" in steps:
-                results["charts"] = chart_updater.update_charts(
-                    session, excel_path, inventory=inventory
+                results["charts"] = _run_step(
+                    "Charts",
+                    lambda: chart_updater.update_charts(
+                        session,
+                        excel_path,
+                        inventory=inv,  # noqa: F821
+                    ),
                 )
 
             session.save()
-            del inventory  # Release COM references before Session.__exit__
+            del inventory, inv  # Release COM references before Session.__exit__
     finally:
         decx_logger.removeHandler(collector)
         decx_logger.propagate = old_propagate
@@ -284,35 +323,14 @@ def _run_pairs(pairs: list[tuple[str, str]], config: dict, args: argparse.Namesp
 
         pptx_name = os.path.basename(pptx_path)
         excel_name = os.path.basename(excel_path) if excel_path else "(no Excel)"
-        verbose = getattr(args, "verbose", False)
 
         t_file = time.perf_counter()
 
-        if verbose:
-            # Verbose: no spinner, just let logs print cleanly
-            console.print(
-                f"\n[bold]Processing ({idx}/{total_files}):[/bold] "
-                f"{pptx_name} <- {excel_name}"
-            )
-            results, errors = process_presentation(
-                actual_path, excel_path, config, args
-            )
-        else:
-            # Normal: spinner with transient (disappears when done)
-            with Progress(
-                SpinnerColumn(),
-                TextColumn("[progress.description]{task.description}"),
-                TimeElapsedColumn(),
-                console=console,
-                transient=True,
-            ) as progress:
-                progress.add_task(
-                    f"Processing ({idx}/{total_files}): {pptx_name} <- {excel_name}",
-                    total=None,
-                )
-                results, errors = process_presentation(
-                    actual_path, excel_path, config, args
-                )
+        console.print(
+            f"\n[bold]Processing ({idx}/{total_files}):[/bold] "
+            f"{pptx_name} <- {excel_name}"
+        )
+        results, errors = process_presentation(actual_path, excel_path, config, args)
 
         elapsed = time.perf_counter() - t_file
 
