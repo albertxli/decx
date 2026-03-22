@@ -135,6 +135,11 @@ def check_tables(session, config, inventory, excel_override=None):
         table_shape, table_type = tbl_entry
         do_transpose = table_type == "trns"
 
+        # Skip _ccst tables — color coder transforms their text (strips %,
+        # adds +/- prefix), so raw Excel comparison would always mismatch.
+        if "_ccst" in table_shape.Name:
+            continue
+
         # Get Excel source
         try:
             source_full = ole_shp.LinkFormat.SourceFullName
