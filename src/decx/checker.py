@@ -298,11 +298,27 @@ def check_deltas(session, config, inventory, excel_override=None):
     return checked, mismatches
 
 
+def _is_empty_or_zero(val, tol: float = 1e-9) -> bool:
+    """Check if a value is None, empty string, or zero."""
+    if val is None or val == "":
+        return True
+    try:
+        return abs(float(val)) < tol
+    except (TypeError, ValueError):
+        return False
+
+
 def _values_match(before: tuple, after: tuple, tol: float = 1e-9) -> bool:
-    """Compare two tuples of numeric values with float tolerance."""
+    """Compare two tuples of numeric values with float tolerance.
+
+    Treats None, empty string, and 0.0 as equivalent (charts plot empty cells as zero).
+    """
     if len(before) != len(after):
         return False
     for a, b in zip(before, after):
+        # Both empty/zero → match
+        if _is_empty_or_zero(a, tol) and _is_empty_or_zero(b, tol):
+            continue
         try:
             if abs(float(a) - float(b)) > tol:
                 return False
@@ -326,16 +342,35 @@ def _build_chart_ref_map(pptx_path: str) -> dict[tuple[int, int], list[str]]:
 
     try:
         with zipfile.ZipFile(pptx_path, "r") as z:
-            slide_files = sorted(
-                [f for f in z.namelist() if re.match(r"ppt/slides/slide\d+\.xml$", f)],
-                key=lambda f: int(re.search(r"slide(\d+)", f).group(1)),
+            # Build presentation-order slide list from presentation.xml
+            # (XML slide filenames may not match COM slide indices)
+            ns_pres = "http://schemas.openxmlformats.org/presentationml/2006/main"
+            ns_rel = (
+                "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
             )
 
-            for sf in slide_files:
-                slide_num = int(re.search(r"slide(\d+)", sf).group(1))
+            pres_root = ET.fromstring(z.read("ppt/presentation.xml"))
+            pres_rels = ET.fromstring(z.read("ppt/_rels/presentation.xml.rels"))
+            rid_to_target = {r.get("Id"): r.get("Target") for r in pres_rels}
+
+            slide_files_ordered = []
+            sld_id_lst = pres_root.find(f"{{{ns_pres}}}sldIdLst")
+            if sld_id_lst is not None:
+                for sld_id in sld_id_lst:
+                    rid = sld_id.get(f"{{{ns_rel}}}id")
+                    target = rid_to_target.get(rid, "")
+                    if target:
+                        slide_files_ordered.append(f"ppt/{target}")
+
+            for com_index, sf in enumerate(slide_files_ordered, 1):
+                # Extract slide filename number for rels lookup
+                slide_file_num = re.search(r"slide(\d+)", sf)
+                if not slide_file_num:
+                    continue
+                file_num = slide_file_num.group(1)
 
                 # Parse slide rels to map rId -> chart file
-                rels_path = f"ppt/slides/_rels/slide{slide_num}.xml.rels"
+                rels_path = f"ppt/slides/_rels/slide{file_num}.xml.rels"
                 try:
                     rels_root = ET.fromstring(z.read(rels_path))
                     rid_map = {r.get("Id"): r.get("Target") for r in rels_root}
@@ -360,15 +395,20 @@ def _build_chart_ref_map(pptx_path: str) -> dict[tuple[int, int], list[str]]:
                     # Resolve relative path: ../charts/chart5.xml -> ppt/charts/chart5.xml
                     chart_path = target.replace("../", "ppt/")
 
-                    # Parse the chart XML for numRef ranges
+                    # Parse chart XML for series Y-value ranges ONLY
+                    # (skip cat/numRef which are category/X-axis references)
                     try:
                         chart_root = ET.fromstring(z.read(chart_path))
                         refs = []
-                        for num_ref in chart_root.iter(f"{{{ns_c}}}numRef"):
-                            f_elem = num_ref.find(f"{{{ns_c}}}f")
-                            if f_elem is not None and f_elem.text:
-                                refs.append(f_elem.text)
-                        result[(slide_num, chart_pos)] = refs
+                        for ser in chart_root.iter(f"{{{ns_c}}}ser"):
+                            val_elem = ser.find(f"{{{ns_c}}}val")
+                            if val_elem is not None:
+                                num_ref = val_elem.find(f"{{{ns_c}}}numRef")
+                                if num_ref is not None:
+                                    f_elem = num_ref.find(f"{{{ns_c}}}f")
+                                    if f_elem is not None and f_elem.text:
+                                        refs.append(f_elem.text)
+                        result[(com_index, chart_pos)] = refs
                     except Exception:
                         pass
 
