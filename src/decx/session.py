@@ -190,8 +190,24 @@ class Session:
                 pass
             self.excel_app = None
 
-        # Release COM pointers and give OS time to clean up processes
+        # Release COM pointers. Double gc.collect ensures full cleanup.
         gc.collect()
-        time.sleep(0.3)
+        gc.collect()
+
+        # Verify processes actually exited. If not, force-kill zombies.
+        # This prevents COM process buildup in batch runs (decx run).
+        import subprocess
+
+        time.sleep(0.5)
+        for proc in ("POWERPNT.EXE", "EXCEL.EXE"):
+            # Check if process is still running
+            result = subprocess.run(
+                ["tasklist", "/FI", f"IMAGENAME eq {proc}", "/NH"],
+                capture_output=True,
+                text=True,
+            )
+            if proc.lower() in result.stdout.lower():
+                subprocess.run(["taskkill", "/F", "/IM", proc], capture_output=True)
+                time.sleep(0.3)
 
         return False  # don't suppress exceptions
