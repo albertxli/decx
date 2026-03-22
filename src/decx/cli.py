@@ -962,6 +962,93 @@ def cmd_config():
     console.print("\nUsage: decx update report.pptx -e data.xlsx --set KEY=VALUE")
 
 
+def cmd_diff(args: argparse.Namespace):
+    """Handle the 'diff' subcommand — compare two PPTX files."""
+    from decx.differ import run_diff
+
+    # Logging
+    if args.verbose:
+        logging.basicConfig(
+            level=logging.DEBUG,
+            format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+            datefmt="%H:%M:%S",
+        )
+    else:
+        logging.basicConfig(level=logging.CRITICAL)
+
+    path_a = os.path.abspath(args.file_a)
+    path_b = os.path.abspath(args.file_b)
+
+    for p in (path_a, path_b):
+        if not os.path.exists(p):
+            console.print(f"[red]Error:[/red] File not found: {p}")
+            sys.exit(1)
+
+    name_a = os.path.basename(path_a)
+    name_b = os.path.basename(path_b)
+
+    with console.status("Comparing presentations...", spinner="dots"):
+        t_start = time.perf_counter()
+        with Session(path_a, read_only=True) as sa, Session(path_b, read_only=True) as sb:
+            result = run_diff(sa, sb)
+        elapsed = time.perf_counter() - t_start
+
+    # --- Summary ---
+    console.print(f"\nDiff: {name_a} vs {name_b} ({elapsed:.1f}s)\n")
+
+    summary = Table(show_header=True)
+    summary.add_column("Type")
+    summary.add_column("Compared", justify="right")
+    summary.add_column("Diffs", justify="right")
+
+    tbl_diffs = sum(1 for d in result.diffs if d.category == "table")
+    delt_diffs = sum(1 for d in result.diffs if d.category == "delta")
+    chart_diffs = sum(1 for d in result.diffs if d.category == "chart")
+
+    summary.add_row(
+        "Tables",
+        f"{result.tables_compared} ({result.cells_compared} cells)",
+        str(tbl_diffs),
+    )
+    summary.add_row("Deltas", str(result.deltas_compared), str(delt_diffs))
+    summary.add_row(
+        "Charts",
+        f"{result.charts_compared} ({result.series_compared} series)",
+        str(chart_diffs),
+    )
+    console.print(summary)
+
+    # --- Only-in-A / Only-in-B ---
+    if result.only_in_a:
+        console.print(f"\n[yellow]Only in {name_a}:[/yellow]")
+        for item in result.only_in_a:
+            console.print(f"  {item}")
+    if result.only_in_b:
+        console.print(f"\n[yellow]Only in {name_b}:[/yellow]")
+        for item in result.only_in_b:
+            console.print(f"  {item}")
+
+    # --- Diff details ---
+    if result.diffs:
+        console.print("\nDifferences")
+        dt = Table(show_header=True)
+        dt.add_column("Slide", justify="right")
+        dt.add_column("Shape")
+        dt.add_column("Type")
+        dt.add_column("Detail")
+        for d in result.diffs:
+            dt.add_row(str(d.slide), d.shape, d.category, d.detail)
+        console.print(dt)
+
+    # --- Final verdict ---
+    total_diffs = len(result.diffs) + len(result.only_in_a) + len(result.only_in_b)
+    if total_diffs == 0:
+        console.print("\n[green]No differences found.[/green]")
+    else:
+        console.print(f"\n[red]{total_diffs} difference(s) found.[/red]")
+        sys.exit(1)
+
+
 def main():
     parser = argparse.ArgumentParser(
         prog="decx",
@@ -1132,6 +1219,23 @@ def main():
         ),
     )
 
+    # --- diff subcommand ---
+    diff_parser = subparsers.add_parser(
+        "diff",
+        help="Compare two PPTX files and show value differences",
+        epilog=(
+            "Examples:\n"
+            "  decx diff before.pptx after.pptx\n"
+            "  decx diff template.pptx output/argentina.pptx\n"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    diff_parser.add_argument("file_a", help="First .pptx file")
+    diff_parser.add_argument("file_b", help="Second .pptx file")
+    diff_parser.add_argument(
+        "--verbose", "-v", action="store_true", help="Enable debug logging"
+    )
+
     # --- clean subcommand ---
     clean_parser = subparsers.add_parser(
         "clean",
@@ -1155,6 +1259,8 @@ def main():
         cmd_run(args)
     elif args.command == "check":
         cmd_check(args)
+    elif args.command == "diff":
+        cmd_diff(args)
     elif args.command == "clean":
         cmd_clean(args)
     else:
