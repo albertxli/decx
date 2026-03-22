@@ -108,3 +108,43 @@ def _rewrite_rels(data: bytes, new_file_uri: str) -> tuple[bytes, int]:
     ET.register_namespace("", ns.strip("{}")) if ns else None
     modified = ET.tostring(root, xml_declaration=True, encoding="UTF-8")
     return modified, count
+
+
+def detect_linked_excel(pptx_path: str) -> str | None:
+    """Detect the Excel file path from existing OLE links in a PPTX.
+
+    Parses the PPTX zip for the first external OLE relationship target
+    and returns the file path (stripped of file:/// prefix and !sheet!range suffix).
+
+    Returns None if no linked Excel is found.
+    """
+    try:
+        with zipfile.ZipFile(pptx_path, "r") as z:
+            rels_files = [
+                f for f in z.namelist() if "slides/_rels/" in f and f.endswith(".rels")
+            ]
+
+            for rf in sorted(rels_files):
+                root = ET.fromstring(z.read(rf))
+                for rel in root:
+                    target = rel.get("Target", "")
+                    target_mode = rel.get("TargetMode", "")
+                    if target_mode != "External" or not target.startswith("file:///"):
+                        continue
+
+                    # Strip file:/// prefix
+                    path = target[len("file:///") :]
+                    # Strip !sheet!range suffix
+                    bang_pos = path.find("!")
+                    if bang_pos >= 0:
+                        path = path[:bang_pos]
+                    # Normalize slashes
+                    path = path.replace("/", os.sep)
+
+                    if path and os.path.exists(path):
+                        return path
+
+    except Exception:
+        pass
+
+    return None

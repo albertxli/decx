@@ -376,13 +376,31 @@ def cmd_update(args: argparse.Namespace):
     needs_excel = bool(steps & STEPS_REQUIRING_EXCEL)
 
     excel_path = args.excel
-    if not excel_path and needs_excel:
+    if not excel_path and getattr(args, "pick", False):
+        # --pick: force file picker
         from decx.file_picker import pick_excel_file
 
         excel_path = pick_excel_file()
         if not excel_path:
             print("No Excel file selected. Exiting.")
             sys.exit(1)
+    if not excel_path:
+        # Auto-detect from existing OLE links
+        from decx.zip_relinker import detect_linked_excel
+
+        pptx_files_for_detect = resolve_paths(args.presentations)
+        if pptx_files_for_detect:
+            excel_path = detect_linked_excel(pptx_files_for_detect[0])
+            if excel_path:
+                console.print(
+                    f"[dim]Auto-detected Excel:[/dim] {os.path.basename(excel_path)}"
+                )
+    if not excel_path and needs_excel:
+        console.print(
+            "[red]Error:[/red] No linked Excel found. "
+            "Use [bold]-e[/bold] to specify or [bold]-p[/bold] for file picker."
+        )
+        sys.exit(1)
     if excel_path:
         excel_path = os.path.abspath(excel_path)
         if not os.path.exists(excel_path):
@@ -964,7 +982,6 @@ def main():
     )
     update_parser.add_argument(
         "--pair",
-        "-p",
         action="append",
         default=None,
         metavar="PPT:XLSX",
@@ -978,6 +995,12 @@ def main():
             "Output path. If ends with .pptx, write to that file (single-file only). "
             "If a directory, write output files there. If omitted, modify in-place."
         ),
+    )
+    update_parser.add_argument(
+        "--pick",
+        "-p",
+        action="store_true",
+        help="Open file picker to select Excel file (instead of auto-detect)",
     )
     update_parser.add_argument(
         "--only",
