@@ -290,3 +290,27 @@ See: `decx/checker.py` — `_read_chart_range()`
 2. Close PowerPoint before Excel in `Session.__exit__` — avoids Excel hanging on chart data source lookups
 
 **Rule:** Always `del inventory` before the `with Session` block ends. And always close PowerPoint before Excel in `__exit__`.
+
+---
+
+## 22. ZIP Pre-Relink Eliminates COM Link Repoint Overhead
+
+**Problem:** `shp.LinkFormat.SourceFullName = new_path` takes ~1s per shape via COM when the path changes. With 186 OLE+chart links, that's ~90-100s just for repointing. For batch runs (26 markets), this adds ~40 minutes of pure relink overhead.
+
+**Why it's slow:** Each `SourceFullName` assignment triggers PowerPoint to validate the new path, connect to Excel internally, and update its link cache — all synchronously via COM.
+
+**Fix:** Rewrite link paths directly in the PPTX zip XML BEFORE COM opens the file. OLE and chart links are stored as external relationships in `.rels` files:
+```xml
+<Relationship Target="file:///C:\old\data.xlsx!Tables!R1C1" TargetMode="External"/>
+```
+
+A simple string replace across all `.rels` files rewrites 186 links in **0.12 seconds**. When COM opens the file, all links already point to the correct Excel — making the COM linker a near-no-op (~0.01s per shape).
+
+**Results:**
+- Single file repoint (different Excel): 40s → 21s
+- Batch 3 reports: 145s → 64s
+- ZIP relink step: 0.12s for 186 links
+
+**Implementation:** `decx/zip_relinker.py` — called in `_run_pairs()` before COM processing. Applied to all update paths (`dx update`, `dx run`).
+
+**Rule:** Always zip-relink before opening with COM. The COM linker still runs as a safety net but becomes a fast no-op.

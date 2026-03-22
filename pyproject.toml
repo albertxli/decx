@@ -1,6 +1,6 @@
 [project]
 name = "decx"
-version = "0.3.2"
+version = "0.4.0"
 description = "Automated PowerPoint report generation from Excel data via COM"
 readme = "README.md"
 license = {text = "MIT"}

@@ -275,6 +275,13 @@ def _run_pairs(pairs: list[tuple[str, str]], config: dict, args: argparse.Namesp
             pptx_path, output, is_batch=len(pairs) > 1, pair_count=len(pairs)
         )
 
+        # Pre-relink via ZIP — rewrite OLE/chart paths before COM opens the file.
+        # Reduces per-link COM overhead from ~1s to ~0.01s (see GOTCHAS #15).
+        if excel_path:
+            from decx.zip_relinker import relink_pptx_zip
+
+            relink_pptx_zip(actual_path, excel_path)
+
         pptx_name = os.path.basename(pptx_path)
         excel_name = os.path.basename(excel_path) if excel_path else "(no Excel)"
         verbose = getattr(args, "verbose", False)
@@ -603,13 +610,6 @@ def cmd_run(args: argparse.Namespace):
         # Create output directory and copy template
         os.makedirs(os.path.dirname(job.output) or ".", exist_ok=True)
         shutil.copy2(job.template, job.output)
-
-        # Pre-relink via ZIP — rewrite OLE/chart paths before COM opens the file.
-        # This avoids ~1s per-link COM overhead (see GOTCHAS #15).
-        from decx.zip_relinker import relink_pptx_zip
-
-        relink_pptx_zip(job.output, job.excel)
-
         pairs.append((job.output, job.excel))
 
     # Build synthetic options namespace
