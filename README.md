@@ -25,11 +25,19 @@ pip install decx
 
 ## Usage
 
+`decx` is also available as `dx` for brevity — all examples below work with either.
+
 ### Update presentations
 
 ```bash
-# Single presentation with one Excel file
+# Single presentation — auto-detects linked Excel from OLE links
+decx update report.pptx
+
+# Explicitly specify Excel file
 decx update report.pptx --excel data.xlsx
+
+# Open file picker to choose Excel file
+decx update report.pptx --pick
 
 # Save output to a specific file (instead of modifying in-place)
 decx update report.pptx --excel data.xlsx -o updated_report.pptx
@@ -154,8 +162,9 @@ decx --help                     Show help
 
 decx update [FILES] [OPTIONS]   Run the update pipeline
   FILES                         One or more .pptx files (glob patterns OK)
-  -e, --excel PATH              Excel data file (or file picker opens)
-  -p, --pair PPT:XLSX           Explicit pptx:xlsx pair (repeatable)
+  -e, --excel PATH              Excel data file (auto-detected from OLE links if omitted)
+  -p, --pick                    Open file picker to select Excel file
+  --pair PPT:XLSX               Explicit pptx:xlsx pair (repeatable)
   -o, --output PATH             Output file (.pptx) or directory
   --only STEP                   Run only specified step(s) (repeatable)
                                 Valid: links, tables, deltas, coloring, charts
@@ -172,9 +181,11 @@ decx config                     Show all available --set keys and defaults
 
 decx steps                      Show all pipeline steps for use with --only
 
-decx run RUNFILE [-v]           Execute a Python runfile for batch processing
+decx run RUNFILE [-v] [--check] Execute a Python runfile for batch processing
 
 decx check FILE [-e EXCEL] [-v] Validate PPT values against Excel source data
+
+decx diff A.pptx B.pptx [-v]   Compare two PPTX files and show value differences
 
 decx clean [-f]                 Kill all PowerPoint and Excel processes
 ```
@@ -328,6 +339,17 @@ Output includes a summary table with PASS/FAIL per category, and a mismatch deta
 ```
 
 Exit code is `0` if all checks pass, `1` if any mismatches — useful for scripts and CI.
+
+## Diff
+
+Compare two PPTX files to see exactly what values differ — useful for verifying updates or spotting regressions:
+
+```bash
+decx diff before.pptx after.pptx
+decx diff template.pptx output/argentina.pptx
+```
+
+Compares table cell text, delta sign states, and chart series values. Read-only, no Excel needed. Exit code `1` if differences found.
 
 ## Benchmark
 
