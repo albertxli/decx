@@ -108,6 +108,49 @@ def _cell_ref(base_row: int, base_col: int, row_offset: int, col_offset: int) ->
     return f"{col_letter}{row}"
 
 
+def _apply_ccst_transform(text: str, config: dict) -> str:
+    """Apply the same transformation the color coder does to Excel text.
+
+    Mirrors the logic in color_coder.py: add positive prefix, then strip symbols.
+    """
+    ccst_cfg = config.get("ccst", {})
+    positive_prefix = ccst_cfg.get("positive_prefix", "+")
+    symbol_removal = ccst_cfg.get("symbol_removal", "%")
+
+    cell_text = text.strip()
+    if not cell_text:
+        return cell_text
+
+    # Determine if numeric and its sign
+    test_val = cell_text
+    had_percent = test_val.endswith("%")
+    if had_percent:
+        test_val = test_val[:-1].strip()
+    try:
+        num = float(test_val)
+    except (ValueError, TypeError):
+        return cell_text  # non-numeric, return as-is
+
+    # Add positive prefix
+    if num > 0 and positive_prefix:
+        if not cell_text.startswith(positive_prefix):
+            if had_percent:
+                cell_text = f"{positive_prefix}{test_val}%"
+            else:
+                cell_text = f"{positive_prefix}{test_val}"
+
+    # Symbol removal
+    if symbol_removal:
+        if "%" in symbol_removal and cell_text.endswith("%"):
+            cell_text = cell_text[:-1]
+        if "+" in symbol_removal and cell_text.startswith("+"):
+            cell_text = cell_text[1:]
+        if "-" in symbol_removal and cell_text.startswith("-"):
+            cell_text = cell_text[1:]
+
+    return cell_text
+
+
 def _compare_cell_text(ppt_text: str, excel_text: str) -> bool:
     """Compare PPT and Excel cell text, tolerant of whitespace."""
     return ppt_text.strip() == excel_text.strip()
@@ -134,11 +177,7 @@ def check_tables(session, config, inventory, excel_override=None):
 
         table_shape, table_type = tbl_entry
         do_transpose = table_type == "trns"
-
-        # Skip _ccst tables — color coder transforms their text (strips %,
-        # adds +/- prefix), so raw Excel comparison would always mismatch.
-        if "_ccst" in table_shape.Name:
-            continue
+        is_ccst = "_ccst" in table_shape.Name
 
         # Get Excel source
         try:
@@ -184,6 +223,11 @@ def check_tables(session, config, inventory, excel_override=None):
                     excel_text = cell_range.Cells(r, c).Text
                 except Exception:
                     continue
+
+                # For _ccst tables, apply the same transformation the color coder does:
+                # strip symbol_removal chars, add positive_prefix for positive numbers
+                if is_ccst:
+                    excel_text = _apply_ccst_transform(excel_text, config)
 
                 try:
                     ppt_text = ppt_table.Cell(
