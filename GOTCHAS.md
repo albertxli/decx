@@ -342,3 +342,22 @@ A simple string replace across all `.rels` files rewrites 186 links in **0.12 se
 **Fix:** In `_build_chart_ref_map()`, check each chart's `.rels` file for an `External` TargetMode entry. Skip charts without one — matching COM's `IsLinked` filter.
 
 **Rule:** When building the chart ref map, always filter to linked charts only (those with external .rels entries) to match what COM's `inventory.charts` contains.
+
+---
+
+## 25. Broken Chart Links: COM Reports IsLinked=True with SourceFullName="NULL"
+
+**Problem:** When a user manually breaks a chart link in PowerPoint (right-click → Break Link), COM still reports `ChartData.IsLinked = True`. The `LinkFormat.SourceFullName` returns the string `"NULL"` (not Python `None`).
+
+**Behavior:**
+- `ChartData.IsLinked` → `True` (chart type is still "external", not embedded)
+- `LinkFormat.SourceFullName` → `"NULL"` (literal string)
+- `SeriesCollection.Values` → still returns cached data from before break
+- `LinkFormat.AutoUpdate` → `1` (manual)
+
+**Impact on decx:**
+- `inventory.charts` includes the broken chart (IsLinked=True)
+- `check_charts` compares cached PPT values against XML range refs — may pass if data hasn't changed in Excel since the break, or correctly flag stale data if it has
+- `chart_updater` would fail to repoint since SourceFullName="NULL" — but the chart still gets counted
+
+**No fix needed** — current behavior is acceptable. The broken chart retains cached data and validates against it.
