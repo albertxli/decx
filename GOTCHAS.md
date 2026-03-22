@@ -314,3 +314,31 @@ A simple string replace across all `.rels` files rewrites 186 links in **0.12 se
 **Implementation:** `decx/zip_relinker.py` — called in `_run_pairs()` before COM processing. Applied to all update paths (`dx update`, `dx run`).
 
 **Rule:** Always zip-relink before opening with COM. The COM linker still runs as a safety net but becomes a fast no-op.
+
+---
+
+## 23. Chart XML numRef Includes Category References — Must Filter to val/ Only
+
+**Problem:** `_build_chart_ref_map()` collected ALL `<c:numRef>` elements from chart XML, including category (X-axis) references inside `<c:cat>`. This caused wrong range mappings — the first numRef was often the category range, not the Y-values range.
+
+**Chart XML structure:**
+```xml
+<c:ser>
+  <c:cat><c:numRef><c:f>Tables!$D$988:$G$988</c:f></c:numRef></c:cat>  ← categories (X-axis)
+  <c:val><c:numRef><c:f>Tables!$D$1004:$G$1004</c:f></c:numRef></c:val> ← values (Y-axis)
+</c:ser>
+```
+
+**Fix:** Only collect `<c:numRef>` inside `<c:val>` elements by iterating `<c:ser>` → `<c:val>` → `<c:numRef>`, not all `<c:numRef>` globally.
+
+---
+
+## 24. Unlinked Charts in XML Break Position-Based Chart Mapping
+
+**Problem:** Some charts in the PPTX XML have `<c:externalData>` but no external relationship entry in their `.rels` file (link was broken or removed). COM's `ChartData.IsLinked` returns `False` for these, so they're excluded from `inventory.charts`. But the XML parser counted them, shifting all subsequent chart positions by 1 and causing mismatches.
+
+**Example:** Slide has 8 chart graphicFrames in XML but only 7 are linked (COM sees 7). One hidden/broken chart at XML position 4 is skipped by COM but counted by XML, misaligning positions 5-7.
+
+**Fix:** In `_build_chart_ref_map()`, check each chart's `.rels` file for an `External` TargetMode entry. Skip charts without one — matching COM's `IsLinked` filter.
+
+**Rule:** When building the chart ref map, always filter to linked charts only (those with external .rels entries) to match what COM's `inventory.charts` contains.

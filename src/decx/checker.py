@@ -395,6 +395,22 @@ def _build_chart_ref_map(pptx_path: str) -> dict[tuple[int, int], list[str]]:
                     # Resolve relative path: ../charts/chart5.xml -> ppt/charts/chart5.xml
                     chart_path = target.replace("../", "ppt/")
 
+                    # Skip unlinked charts (no external .rels entry).
+                    # COM's IsLinked check excludes these, so we must too
+                    # to keep position alignment.
+                    chart_rels_path = (
+                        chart_path.replace("ppt/charts/", "ppt/charts/_rels/") + ".rels"
+                    )
+                    try:
+                        chart_rels = ET.fromstring(z.read(chart_rels_path))
+                        has_external = any(
+                            r.get("TargetMode") == "External" for r in chart_rels
+                        )
+                    except Exception:
+                        has_external = False
+                    if not has_external:
+                        continue  # skip — not counted by COM either
+
                     # Parse chart XML for series Y-value ranges ONLY
                     # (skip cat/numRef which are category/X-axis references)
                     try:
