@@ -245,6 +245,7 @@ def process_presentation(
                 )
 
             session.save()
+            del inventory  # Release COM references before Session.__exit__
     finally:
         decx_logger.removeHandler(collector)
         decx_logger.propagate = old_propagate

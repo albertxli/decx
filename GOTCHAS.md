@@ -270,3 +270,23 @@ Also strip outer parentheses if present: `(Tables!$C$810,Tables!$F$810)` → `Ta
 **Rule:** Always handle comma-separated multi-area ranges when reading chart data references. Split, read each part, concatenate.
 
 See: `decx/checker.py` — `_read_chart_range()`
+
+---
+
+## 21. Excel.Quit() Hangs ~60s When COM Chart References Are Alive
+
+**Problem:** `excel_app.Quit()` hangs for ~60 seconds when the Python `with` block still holds live COM references to linked chart shapes (via the `inventory` object). This only manifests with chart-only PPTX files (no OLE objects) because OLE processing masks the timing.
+
+**Root cause:** Python's `with` statement keeps local variables alive until `__exit__` finishes. The `inventory` object holds `(slide, chart_shape)` tuples with live COM pointers. When `Excel.Quit()` runs while these references exist, Excel waits ~60s for COM reference cleanup before actually quitting.
+
+**Debugging evidence:**
+- `del inventory` before `with` block exits: 6s total
+- Without `del inventory`: 62s total
+- `__exit__` called manually (after script-level variables are freed): 1.6s
+- Same `__exit__` called via `with` statement: 62s
+
+**Fix (two parts, both required):**
+1. `del inventory` inside the `with Session` block before it exits — releases COM chart references
+2. Close PowerPoint before Excel in `Session.__exit__` — avoids Excel hanging on chart data source lookups
+
+**Rule:** Always `del inventory` before the `with Session` block ends. And always close PowerPoint before Excel in `__exit__`.

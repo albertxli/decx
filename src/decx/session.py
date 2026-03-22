@@ -152,29 +152,9 @@ class Session:
         log.info("Saved presentation: %s", self.pptx_path)
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        # --- Excel cleanup ---
-        for path, wb in list(self._workbook_cache.items()):
-            try:
-                wb.Close(SaveChanges=False)
-            except Exception:
-                pass
-        self._workbook_cache.clear()
-        self.workbook = None
-
-        if self.excel_app is not None:
-            # Restore calculation mode
-            if self._prev_calc is not None:
-                try:
-                    self.excel_app.Calculation = self._prev_calc
-                except Exception:
-                    pass
-            try:
-                self.excel_app.Quit()
-            except Exception:
-                pass
-            self.excel_app = None
-
-        # --- PowerPoint cleanup ---
+        # --- PowerPoint cleanup FIRST ---
+        # Must close PPT before Excel to avoid ~60s hang on Excel.Quit()
+        # when linked chart COM references exist. See GOTCHAS #21.
         if self.presentation is not None:
             try:
                 self.presentation.Close()
@@ -188,6 +168,27 @@ class Session:
             except Exception:
                 pass
             self.ppt_app = None
+
+        # --- Excel cleanup AFTER PowerPoint ---
+        for path, wb in list(self._workbook_cache.items()):
+            try:
+                wb.Close(SaveChanges=False)
+            except Exception:
+                pass
+        self._workbook_cache.clear()
+        self.workbook = None
+
+        if self.excel_app is not None:
+            if self._prev_calc is not None:
+                try:
+                    self.excel_app.Calculation = self._prev_calc
+                except Exception:
+                    pass
+            try:
+                self.excel_app.Quit()
+            except Exception:
+                pass
+            self.excel_app = None
 
         # Release COM pointers and give OS time to clean up processes
         gc.collect()
