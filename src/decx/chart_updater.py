@@ -33,9 +33,7 @@ def update_charts(session, excel_path: str, inventory=None) -> int:
     for _slide, chart_shape in charts:
         try:
             chart_shape.LinkFormat.SourceFullName = excel_path
-            # Skip LinkFormat.Update() — causes ~60s hang on chart-only PPTX files
-            # (when no OLE objects are present). Just repoint and set manual mode.
-            # Chart data correctness is verified by `decx check`.
+            chart_shape.LinkFormat.Update()
             chart_shape.LinkFormat.AutoUpdate = PP_UPDATE_OPTION_MANUAL
             updated += 1
             log.debug("Updated chart: %s", chart_shape.Name)
