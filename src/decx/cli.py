@@ -989,7 +989,10 @@ def cmd_diff(args: argparse.Namespace):
 
     with console.status("Comparing presentations...", spinner="dots"):
         t_start = time.perf_counter()
-        with Session(path_a, read_only=True) as sa, Session(path_b, read_only=True) as sb:
+        with (
+            Session(path_a, read_only=True) as sa,
+            Session(path_b, read_only=True) as sb,
+        ):
             result = run_diff(sa, sb)
         elapsed = time.perf_counter() - t_start
 

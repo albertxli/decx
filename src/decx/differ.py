@@ -142,7 +142,7 @@ def _diff_tables(inv_a, inv_b, result: DiffResult):
                             slide=sld_idx,
                             shape=shape_a.Name,
                             category="table",
-                            detail=f"[{r+1},{c+1}] {val_a!r} → {val_b!r}",
+                            detail=f"[{r + 1},{c + 1}] {val_a!r} → {val_b!r}",
                         )
                     )
 
@@ -196,10 +196,10 @@ def _diff_charts(inv_a, inv_b, result: DiffResult):
 
         for i in range(max(len(list_a), len(list_b))):
             if i >= len(list_a):
-                result.only_in_b.append(f"slide {sld_idx}: chart #{i+1}")
+                result.only_in_b.append(f"slide {sld_idx}: chart #{i + 1}")
                 continue
             if i >= len(list_b):
-                result.only_in_a.append(f"slide {sld_idx}: chart #{i+1}")
+                result.only_in_a.append(f"slide {sld_idx}: chart #{i + 1}")
                 continue
 
             shp_a = list_a[i]
