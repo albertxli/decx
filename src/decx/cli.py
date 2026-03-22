@@ -603,6 +603,13 @@ def cmd_run(args: argparse.Namespace):
         # Create output directory and copy template
         os.makedirs(os.path.dirname(job.output) or ".", exist_ok=True)
         shutil.copy2(job.template, job.output)
+
+        # Pre-relink via ZIP — rewrite OLE/chart paths before COM opens the file.
+        # This avoids ~1s per-link COM overhead (see GOTCHAS #15).
+        from decx.zip_relinker import relink_pptx_zip
+
+        relink_pptx_zip(job.output, job.excel)
+
         pairs.append((job.output, job.excel))
 
     # Build synthetic options namespace
