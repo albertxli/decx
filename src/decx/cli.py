@@ -777,7 +777,13 @@ def cmd_check(args: argparse.Namespace):
         logging.basicConfig(level=logging.CRITICAL)
 
     target = args.presentation
-    config = get_config()
+
+    # Config — defaults + optional --set overrides
+    try:
+        config = get_config(getattr(args, "set", None))
+    except ValueError as e:
+        console.print(f"[red]Config error:[/red] {e}")
+        sys.exit(1)
 
     # Detect runfile mode (.py) vs single file mode (.pptx)
     if target.endswith(".py"):
@@ -839,6 +845,15 @@ def _cmd_check_runfile(target: str, config: dict, args):
     except (ValueError, FileNotFoundError) as e:
         console.print(f"[red]Error:[/red] {e}")
         sys.exit(1)
+
+    # Apply runfile config overrides on top of CLI config
+    if spec.config:
+        try:
+            overrides = [f"{k}={v}" for k, v in spec.config.items()]
+            config = get_config(overrides)
+        except ValueError as e:
+            console.print(f"[red]Config error:[/red] {e}")
+            sys.exit(1)
 
     console.print(f"\nCheck: {os.path.basename(target)} ({len(spec.jobs)} job(s))")
 
@@ -1064,6 +1079,16 @@ def main():
     )
     check_parser.add_argument(
         "--verbose", "-v", action="store_true", help="Enable debug logging"
+    )
+    check_parser.add_argument(
+        "--set",
+        action="append",
+        default=None,
+        metavar="KEY=VALUE",
+        help=(
+            "Override config value using dot notation. Repeatable. "
+            'E.g. --set ccst.positive_prefix=""'
+        ),
     )
 
     # --- clean subcommand ---
